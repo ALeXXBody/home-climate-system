@@ -1,5 +1,7 @@
 # Home Climate System
 
+[![CI](https://github.com/ALeXXBody/home-climate-system/actions/workflows/ci.yml/badge.svg)](https://github.com/ALeXXBody/home-climate-system/actions/workflows/ci.yml)
+
 **Hardware + firmware** for [Home Climate Control](https://github.com/ALeXXBody/home-climate-control).
 
 | Product | Repo | Role |
