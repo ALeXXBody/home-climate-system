@@ -17,7 +17,7 @@ Retained JSON on `hcs/discovery/<node_id>`:
   "node_id": "hcs-aabbccddeeff",
   "name": "Home Climate System",
   "board": "lolin_s2_mini",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "ip": "192.168.x.y",
   "ota_http": "http://192.168.x.y/update",
   "api_status": "http://192.168.x.y/api/status",

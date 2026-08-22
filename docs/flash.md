@@ -9,7 +9,7 @@
 
 ## 1. First boot (captive portal)
 
-Firmware **v0.2** opens AP **`HCS-Setup`** / password **`homeclimate`** when WiFi
+Firmware **v0.2+** opens AP **`HCS-Setup`** / password **`homeclimate`** when WiFi
 is not configured. Join it, open the portal, set home WiFi + MQTT, save.
 
 Optional compile-time seeds (gitignored):
@@ -36,6 +36,18 @@ pio run -e esp32s3_zero
 
 # Classic ESP32 D1 mini form factor
 pio run -e esp32_d1_mini
+
+# LOLIN C3 mini v2.1 — direct fitment, stacks on the DIYLess shield (OT GPIO7/6)
+pio run -e lolin_c3_mini
+```
+
+Gateway builds (ESP32 only — adds the thermostat-side OT front-end; see
+[design-gateway.md](design-gateway.md)):
+
+```bash
+pio run -e lolin_s2_mini_gw    # S2 mini,  OT 4/5 + tstat tap 16/17
+pio run -e esp32_d1_mini_gw    # ESP32 D1 mini, OT 21/22 + tap 26/27
+pio run -e lolin_c3_mini_gw    # C3 mini,  OT 7/6  + tstat tap 4/5
 ```
 
 ## 3. Flash
@@ -46,6 +58,9 @@ pio run -e d1_mini -t upload
 
 # S2 mini (native USB CDC; hold BOOT/0 if needed)
 pio run -e lolin_s2_mini -t upload
+
+# C3 mini (native USB CDC; hold BOOT/0 if needed)
+pio run -e lolin_c3_mini -t upload
 
 # S3-Zero: hold BOOT, plug USB, then:
 pio run -e esp32s3_zero -t upload
@@ -81,7 +96,27 @@ mosquitto_sub -h <broker> -t 'hcs/#' -v
 mosquitto_sub -h <broker> -t 'OTGW/#' -v
 ```
 
-## 5. Home Climate Control
+## 5. Gateway mode (gateway builds only)
+
+After flashing a `*_gw` env the device boots as an OpenTherm **master**
+(thermostat replacement). Switch to gateway mode — it forwards thermostat
+traffic to the boiler and answers locally only when asked:
+
+```bash
+# via MQTT (retained)
+mosquitto_pub -h <broker> -t 'hcs/hcs-aabbccddeeff/gw/set_mode' -m 'gateway'
+
+# or web UI → Gateway tab → switch mode (reboots into gateway mode)
+```
+
+Verify forwarding: `gw/tstat_online` flips to `true` once the real
+thermostat's frames are seen; `gw/mode` echoes the active mode. A setpoint
+override can be pushed with `gw/override_setpoint` (`null`/`{"release":true}`
+releases it).
+
+Mode is persisted and re-applied at boot; switching always reboots.
+
+## 6. Home Climate Control
 
 In HA, add **Home Climate Control** with backend **Real OTGW via MQTT**:
 
@@ -97,5 +132,6 @@ Telemetry subjects match OTGW-firmware names (`boilertemperature`, `flamestatus`
 | No WiFi | join `HCS-Setup` / `homeclimate`, 2.4 GHz SSID only |
 | No MQTT | portal MQTT host, broker IP, firewall, user/pass |
 | OT `valid=false` | wiring IN/OUT swapped?, boiler powered, OT cable |
-| S2/S3 won't flash | hold BOOT/0 while connecting USB-C |
+| C3 mini RGB LED flickers | normal on stacked shield — GPIO7 carries OT traffic |
+| S2/S3/C3 won't flash | hold BOOT/0 while connecting USB-C |
 | CH never starts | publish `ch_enable=on` — boots failsafe off |
