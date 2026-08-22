@@ -18,6 +18,7 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
       - name: Run host-native unit tests
+        working-directory: firmware
         run: pio test -e native
 
   build:
