@@ -51,6 +51,7 @@ Full steps: [docs/flash.md](docs/flash.md).
 - [Hardware wiring](docs/hardware.md)
 - [Flash & MQTT test](docs/flash.md)
 - [Architecture](docs/architecture.md)
+- [Gateway mode design (draft)](docs/design-gateway.md)
 - [MQTT protocol](protocol/mqtt.md)
 - [OTGW-firmware license wall](docs/license-otgw.md)
 
