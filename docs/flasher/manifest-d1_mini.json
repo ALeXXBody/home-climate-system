@@ -1,0 +1,14 @@
+{
+  "name": "Home Climate System — ESP8266 D1 mini",
+  "version": "0.3.0",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP8266",
+      "improv": false,
+      "parts": [
+        { "path": "d1_mini/firmware.bin", "offset": 0 }
+      ]
+    }
+  ]
+}

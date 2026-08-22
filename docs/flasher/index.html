@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home Climate System — USB flasher</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  .card { border: 1px solid #ddd; border-radius: 10px; padding: 1.25rem; margin: 1rem 0; }
+  h1 { font-size: 1.4rem; } h2 { font-size: 1.05rem; margin-top: 0; }
+  ol { padding-left: 1.2rem; } li { margin: .35rem 0; }
+  .note { background:#fff8e6; border:1px solid #f0dfa0; border-radius:8px; padding:.75rem 1rem; }
+  code { background:#f4f4f4; padding:.1rem .3rem; border-radius:4px; }
+</style>
+</head>
+<body>
+<h1>Home Climate System — firmware flasher (v0.3.0)</h1>
+<p>Flashes over USB directly from this page. Works in <strong>Chrome / Edge on desktop</strong>
+(Web Serial). No drivers needed on Linux/macOS; Windows 10/11 usually auto-installs.</p>
+
+<div class="card">
+  <h2>ESP8266 — D1 mini (stacked on DIYLess Master shield)</h2>
+  <esp-web-install-button manifest="manifest-d1_mini.json"></esp-web-install-button>
+</div>
+
+<div class="card">
+  <h2>ESP32-C3 — LOLIN C3 mini v2.1 (stacked on DIYLess Master shield)</h2>
+  <esp-web-install-button manifest="manifest-lolin_c3_mini.json"></esp-web-install-button>
+</div>
+
+<div class="note">
+<strong>Steps:</strong> connect the board by USB → click <em>Install</em> → pick the serial
+port (<code>ttyUSB…</code>/<code>cu.usbserial…</code>/<code>COM…</code>) → confirm erase.
+<br><br>
+<strong>Tips:</strong>
+<ul>
+<li>If the port is missing or install fails at "Connecting": hold the <code>BOOT</code>
+button while plugging in, then retry (C3/S2/S3 native USB).</li>
+<li>Close any serial monitor using the port first.</li>
+<li>After flashing the LED blinks and the device starts access point
+<code>HCS-Setup</code> (password <code>homeclimate</code>) — join it to configure WiFi/MQTT,
+see <a href="../flash.html">flash guide</a>.</li>
+<li>This erases settings when you tick "erase device" — plan to re-run setup.</li>
+</ul>
+</div>
+
+<script type="module"
+  src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+</body>
+</html>
