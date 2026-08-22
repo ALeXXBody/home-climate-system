@@ -7,7 +7,7 @@
 | **DIYLess Master OpenTherm Shield** | Level-shifts MCU GPIO ↔ boiler OpenTherm bus (master / thermostat side) |
 | **ESP8266 D1 mini** | Stacks on the shield (DIYLESS designed for this) |
 | **LOLIN / Wemos S2 mini** | Same D1-mini layout family; OT pins match ESP8266 (GPIO4/5) |
-| **LOLIN C3 mini** | D1-mini form factor, different GPIO map — jumper OT_IN/OT_OUT |
+| **LOLIN C3 mini v2.1** | Direct fitment — stacks; OT lands on GPIO7 (in) / GPIO6 (out) |
 | **ESP32-S3-Zero** | Extra target; does **not** stack — jumper OT_IN / OT_OUT |
 
 The Master shield talks to the **boiler only** (replaces wall thermostat).  
@@ -65,22 +65,21 @@ Do **not** cover the ceramic antenna. USB-C for power/flash
 
 Firmware env: `esp32s3_zero` (`OT_IN=5`, `OT_OUT=6`).
 
-### D) LOLIN C3 mini (jumper wires)
+### D) LOLIN C3 mini v2.1 (direct fitment — stacks)
 
-D1-mini form factor but a different GPIO map (C3 has only GPIO0–21; flash
-uses 11–17, USB 18/19, strapping 2/8/9, LED 7). Wire jumpers, do not stack:
+The C3 mini is D1-mini footprint and Wemos lists it as shield-compatible.
+Stacked on the DIYLess Master shield, the shield's `OT_IN` pad (D1-mini
+D2 position) lands on C3 **GPIO7**, and `OT_OUT` (D1 position) on **GPIO6**
+(verified against the official C3 mini v2.1.0 pinout). Power from 3V3/GND
+positions; 5V position is VBUS.
 
-| Function | C3 mini pin | GPIO | Shield |
-|---|---|---|---|
-| OT receive (in) | any free IO | **GPIO4** | OT_IN |
-| OT transmit (out) | any free IO | **GPIO5** | OT_OUT |
-| GND | GND | — | GND |
-| 3V3 | 3V3 | — | 3V3 |
+Note: GPIO7 also feeds the onboard WS2812 RGB LED — it will flicker with
+OpenTherm traffic. Harmless; treat it as a free activity indicator.
 
-Gateway build (`lolin_c3_mini_gw`) adds the thermostat-side interface on
-**GPIO6** (in) / **GPIO10** (out) — see docs/design-gateway.md.
+Gateway build (`lolin_c3_mini_gw`) adds the thermostat-side front-end on
+free **GPIO4** (in) / **GPIO5** (out) — see docs/design-gateway.md.
 
-Firmware env: `lolin_c3_mini` (`OT_IN=4`, `OT_OUT=5`).
+Firmware env: `lolin_c3_mini` (`OT_IN=7`, `OT_OUT=6`).
 
 Pins are build flags — change in `firmware/platformio.ini` if you rewire.
 

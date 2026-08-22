@@ -45,12 +45,12 @@ Master shield = device is the **thermostat** (not a man-in-the-middle gateway).
 |---|---|---|---|---|
 | `d1_mini` | ESP8266 | 4 (D2) | 5 (D1) | Stacks on DIYLess Master (basic tier) |
 | `lolin_s2_mini` | ESP32-S2 | 4 | 5 | Primary ESP32; D1-mini layout |
-| `lolin_c3_mini` | ESP32-C3 | 4 | 5 | D1-mini form factor; jumper wires |
+| `lolin_c3_mini` | ESP32-C3 | 7 | 6 | Stacks (v2.1 direct fitment) |
 | `esp32_d1_mini` | ESP32 | 21 | 22 | Classic D1 mini ESP32 |
 | `esp32s3_zero` | ESP32-S3 | 5 | 6 | Extra; jumper wires |
 | `lolin_s2_mini_gw` | ESP32-S2 | 4/5 + 16/17 | — | Gateway build (`HCS_GW_ENABLE`) |
 | `esp32_d1_mini_gw` | ESP32 | 21/22 + 26/27 | — | Gateway build (`HCS_GW_ENABLE`) |
-| `lolin_c3_mini_gw` | ESP32-C3 | 4/5 + 6/10 | — | Gateway build (`HCS_GW_ENABLE`) |
+| `lolin_c3_mini_gw` | ESP32-C3 | 7/6 + 4/5 | — | Gateway build (`HCS_GW_ENABLE`) |
 
 **Tiers:** ESP8266 = basic (master thermostat only). ESP32 = advanced (adds
 weather compensation UI parity + optional gateway mode via `*_gw` envs).

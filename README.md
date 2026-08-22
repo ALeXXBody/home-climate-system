@@ -16,7 +16,7 @@ License: **MIT**.
 - **DIYLess Master OpenTherm Shield** → boiler OT bus (master/thermostat)
 - **ESP8266 D1 mini** → stacks on the shield
 - **LOLIN / Wemos S2 mini** → D1-mini layout, same OT pins (GPIO4/5)
-- **LOLIN C3 mini** → D1-mini form factor, jumper wires (GPIO4/5)
+- **LOLIN C3 mini v2.1** → direct fitment, stacks on the shield (GPIO7/6)
 - **ESP32-S3-Zero** → extra target; jumper wires to the shield
 
 See [docs/hardware.md](docs/hardware.md).
