@@ -1,0 +1,7 @@
+__pycache__/
+.pio/
+.vscode/
+*.pyc
+.env
+.DS_Store
+firmware/.pio/
