@@ -9,7 +9,7 @@
 | **Home Climate Control** | [home-climate-control](https://github.com/ALeXXBody/home-climate-control) | HA custom integration (software) |
 | **Home Climate System** | this repo | ESP32 / ESP8266 firmware & hardware |
 
-Private during development. Planned public license: **MIT**.
+Public repository. License: **MIT**.
 
 ## What this repo will contain
 
