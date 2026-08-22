@@ -1,50 +1,49 @@
-# Home Climate System — firmware architecture (draft)
+# Home Climate System — firmware architecture
 
 ## Role
 
-Bridge between:
-
 ```
-Boiler (OpenTherm)  <->  HCS device (ESP32/ESP8266)  <->  MQTT  <->  Home Climate Control (HA)
-```
-
-Optional later: local sensors (outdoor, return temp), status LEDs, OTA.
-
-## Targets
-
-| MCU | Framework (TBD) | Notes |
-|---|---|---|
-| ESP32 | PlatformIO + Arduino or ESP-IDF | Primary |
-| ESP8266 | PlatformIO + Arduino | Secondary, flash/RAM tighter |
-
-## Modules (planned)
-
-```
-firmware/
-  src/
-    main.cpp           # boot, WiFi, loop
-    ot_master.cpp      # OpenTherm master frame TX/RX (clean-room)
-    mqtt_bridge.cpp    # publish telemetry, subscribe commands
-    config.cpp         # NVS / WiFi / broker settings
-    ota.cpp            # optional
-  include/
-    ot_protocol.h      # message IDs, frame helpers
-    mqtt_topics.h      # topic map (see protocol/)
+Boiler (OpenTherm)  <->  DIYLess Master Shield  <->  ESP (D1 mini / S3-Zero)
+                                                      |
+                                                     WiFi
+                                                      |
+                                                    MQTT
+                                                      |
+                                            Home Climate Control (HA)
 ```
 
-## Control surface (v1 intent)
+Master shield = device is the **thermostat** (not a man-in-the-middle gateway).
 
-**Telemetry out (device → broker):** outdoor temp, flow temp, return temp,
-relative modulation, flame, CH active, faults.
+## Modules
 
-**Commands in (broker → device):** CH enable, control setpoint (flow °C),
-max modulation %.
+| File | Responsibility |
+|---|---|
+| `main.cpp` | Boot, WiFi, failsafe CH off, loop |
+| `ot_master.*` | OpenTherm master transactions (status, TSet, reads) |
+| `mqtt_bridge.*` | Subscribe commands, publish telemetry (HCS + OTGW-compat) |
+| `config.h` | Pins, intervals, defaults |
+| `topics.h` | Topic string helpers |
+| `secrets.h` | WiFi/MQTT credentials (local only) |
 
-Exact topic names: `protocol/mqtt.md`.
+## Control path
 
-## Safety
+1. HA / HCC publishes `flow_setpoint` + `ch_enable`
+2. Firmware stores desired state
+3. ~1 Hz: `setBoilerStatus` + `setBoilerTemperature` + read sensors
+4. Telemetry published every 2 s
 
-- Never leave CH enabled with invalid / missing flow setpoint for long.
-- Watchdog reset on OT bus stall.
-- Document that software control of a gas boiler requires working hardware
-  safeties on the boiler itself.
+## Boards
+
+| Env | MCU | OT_IN | OT_OUT |
+|---|---|---|---|
+| `d1_mini` | ESP8266 | 4 (D2) | 5 (D1) |
+| `esp32_d1_mini` | ESP32 | 21 | 22 |
+| `esp32s3_zero` | ESP32-S3 | 5 | 6 |
+
+## Dependencies (MIT-friendly)
+
+- ihormelnyk OpenTherm Library — MIT
+- knolleary PubSubClient — MIT
+- bblanchon ArduinoJson — MIT (reserved for future config JSON)
+
+No GPL sources (see docs/license-otgw.md).

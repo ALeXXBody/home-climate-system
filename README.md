@@ -1,60 +1,55 @@
 # Home Climate System
 
-**Hardware + firmware** companion for
-[Home Climate Control](https://github.com/ALeXXBody/home-climate-control)
-(the Home Assistant software).
+**Hardware + firmware** for [Home Climate Control](https://github.com/ALeXXBody/home-climate-control).
 
 | Product | Repo | Role |
 |---|---|---|
-| **Home Climate Control** | [home-climate-control](https://github.com/ALeXXBody/home-climate-control) | HA custom integration (software) |
-| **Home Climate System** | this repo | ESP32 / ESP8266 firmware & hardware |
+| **Home Climate Control** | [home-climate-control](https://github.com/ALeXXBody/home-climate-control) | HA integration + sidebar app |
+| **Home Climate System** | this repo | ESP firmware + DIYLess OT hardware |
 
-Public repository. License: **MIT**.
+License: **MIT**.
 
-## What this repo will contain
+## Your hardware (supported now)
 
-- `firmware/` — ESP-IDF / Arduino or PlatformIO project for ESP32 and ESP8266
-- `hardware/` — board notes, pinouts, BOM (later)
-- `protocol/` — MQTT topic contract shared with Home Climate Control
-- `docs/` — design notes, license research
+- **DIYLess Master OpenTherm Shield** → boiler OT bus (master/thermostat)
+- **ESP8266 D1 mini** → stacks on the shield
+- **ESP32-S3-Zero** → jumper wires to the shield
 
-## Goals (firmware)
+See [docs/hardware.md](docs/hardware.md).
 
-1. Talk to the boiler over **OpenTherm** (adapter / gateway role).
-2. Publish telemetry and accept commands over **MQTT** so Home Climate Control
-   (and HA) can drive weather-compensated, gas-minimal heating.
-3. Support **ESP32** and **ESP8266** targets.
-4. Stay **MIT-clean**: no GPL code in the tree.
+## Firmware status (v0.1.0)
 
-## License wall (critical)
+PlatformIO project under `firmware/`:
 
-| Project | License | Can we copy code into this MIT repo? |
-|---|---|---|
-| [rvdbreemen/OTGW-firmware](https://github.com/rvdbreemen/OTGW-firmware) | **GPL-3.0** | **NO** |
-| [Alexwijn/SAT](https://github.com/Alexwijn/SAT) | GPL-3.0 | **NO** |
-| OpenTherm protocol itself | specification | yes (implement from docs) |
-| ESPHome `opentherm` component | check per-file | only if license is MIT/Apache-compatible |
+- OpenTherm master via **ihormelnyk/opentherm_library** (MIT)
+- WiFi + MQTT (PubSubClient)
+- Publishes **native `hcs/`** topics and **OTGW-compat** topics for HA
+- Accepts CH enable, flow setpoint, max modulation from MQTT
+- CH **off at boot** (failsafe)
 
-**OTGW-firmware is inspiration only:** MQTT topic *ideas*, OpenTherm message
-IDs, UX patterns. All firmware here must be written clean-room. Linking or
-vendoring GPL sources would force this entire product under GPL and break the
-MIT plan for Home Climate Control + Home Climate System.
+Not yet: captive portal / BLE provisioning, OTA UI in HA sidebar, slave/gateway mode.
 
-See [docs/license-otgw.md](docs/license-otgw.md).
+## Quick start
 
-## Status
+```bash
+cd firmware
+cp include/secrets.example.h include/secrets.h   # edit WiFi + MQTT
+pio run -e d1_mini -t upload                     # or esp32s3_zero
+pio device monitor -b 115200
+```
 
-Scaffold only (v0.0.1). No flashable firmware yet.
+Full steps: [docs/flash.md](docs/flash.md).
+
+## Docs
+
+- [Hardware wiring](docs/hardware.md)
+- [Flash & MQTT test](docs/flash.md)
+- [Architecture](docs/architecture.md)
+- [MQTT protocol](protocol/mqtt.md)
+- [OTGW-firmware license wall](docs/license-otgw.md)
 
 ## Support
-
-If this project helps you, you can support development here:
 
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/alexxbody)
 
 https://buymeacoffee.com/alexxbody
-
-## Related
-
-- Software: https://github.com/ALeXXBody/home-climate-control  
-- Inspiration (do not copy): https://github.com/rvdbreemen/OTGW-firmware  

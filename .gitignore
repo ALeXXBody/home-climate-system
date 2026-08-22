@@ -1,7 +1,11 @@
 __pycache__/
 .pio/
 .vscode/
+.venv/
 *.pyc
 .env
 .DS_Store
 firmware/.pio/
+firmware/include/secrets.h
+*.bin
+*.elf
