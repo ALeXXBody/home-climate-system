@@ -1,6 +1,7 @@
 #include "mqtt_bridge.h"
 #include "topics.h"
 #include "config.h"
+#include "hcs_commands.h"
 
 MqttBridge* MqttBridge::instance_ = nullptr;
 
@@ -18,7 +19,14 @@ void MqttBridge::begin(const char* host, uint16_t port, const char* user,
   pass_ = pass ? pass : "";
   mqtt_.setServer(host, port);
   mqtt_.setCallback(thunk);
-  mqtt_.setBufferSize(512);
+  mqtt_.setBufferSize(1024);
+}
+
+void MqttBridge::setDeviceInfo(const String& name, const String& ip,
+                               const String& otgwNode) {
+  device_name_ = name;
+  ip_ = ip;
+  if (otgwNode.length()) otgw_node_ = otgwNode;
 }
 
 void MqttBridge::loop() {
@@ -33,6 +41,10 @@ void MqttBridge::loop() {
     last_telemetry_ms_ = now;
     publishTelemetry(ot_.snap());
   }
+  if (mqtt_.connected() && now - last_discovery_ms_ >= DISCOVERY_INTERVAL_MS) {
+    last_discovery_ms_ = now;
+    publishDiscovery();
+  }
 }
 
 void MqttBridge::reconnect() {
@@ -40,7 +52,7 @@ void MqttBridge::reconnect() {
   if (now - last_reconnect_ms_ < MQTT_RECONNECT_MS) return;
   last_reconnect_ms_ = now;
 
-  String clientId = "hcs-" + node_id_;
+  String clientId = String("hcs-") + node_id_;
   String lwt = hcsTopic(node_id_, "online");
   bool ok;
   if (user_.length()) {
@@ -52,20 +64,27 @@ void MqttBridge::reconnect() {
   if (ok) {
     publish(lwt, "online", true);
     subscribeAll();
+    publishDiscovery();
+    last_discovery_ms_ = millis();
   }
 }
 
 void MqttBridge::subscribeAll() {
-  // Native HCS commands
   mqtt_.subscribe(hcsSetTopic(node_id_, "ch_enable").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "flow_setpoint").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "max_modulation").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "dhw_enable").c_str());
+  mqtt_.subscribe(hcsSetTopic(node_id_, "ota_url").c_str());
+  mqtt_.subscribe(hcsSetTopic(node_id_, "reboot").c_str());
 
-  // OTGW-firmware compatible commands
-  mqtt_.subscribe(otgwCmd("chenable").c_str());
-  mqtt_.subscribe(otgwCmd("ctrlsetpt").c_str());
-  mqtt_.subscribe(otgwCmd("maxmodulation").c_str());
+  // OTGW-compat (node from settings)
+  String base = String(OTGW_COMPAT_PREFIX) + "/set/" + otgw_node_ + "/";
+  mqtt_.subscribe((base + "chenable").c_str());
+  mqtt_.subscribe((base + "ctrlsetpt").c_str());
+  mqtt_.subscribe((base + "maxmodulation").c_str());
+
+  // Global discovery ping
+  mqtt_.subscribe("hcs/discovery/ping");
 }
 
 void MqttBridge::onMessage(char* topic, byte* payload, unsigned int length) {
@@ -78,26 +97,34 @@ void MqttBridge::onMessage(char* topic, byte* payload, unsigned int length) {
 }
 
 void MqttBridge::handleCommand(const String& topic, const String& payload) {
-  String low = payload;
-  low.toLowerCase();
+  if (topic == "hcs/discovery/ping") {
+    publishDiscovery();
+    return;
+  }
 
-  if (topic.endsWith("/ch_enable") || topic.endsWith("/chenable")) {
-    bool on = (low == "on" || low == "1" || low == "true");
-    ot_.setChEnable(on);
-    return;
-  }
-  if (topic.endsWith("/dhw_enable")) {
-    bool on = (low == "on" || low == "1" || low == "true");
-    ot_.setDhwEnable(on);
-    return;
-  }
-  if (topic.endsWith("/flow_setpoint") || topic.endsWith("/ctrlsetpt")) {
-    ot_.setFlowSetpoint(payload.toFloat());
-    return;
-  }
-  if (topic.endsWith("/max_modulation") || topic.endsWith("/maxmodulation")) {
-    ot_.setMaxModulation(payload.toInt());
-    return;
+  HcsCommandResult r = hcs_parse_command(topic.c_str(), payload.c_str());
+  switch (r.cmd) {
+    case HCS_CMD_CH_ENABLE:
+      ot_.setChEnable(r.bool_value);
+      break;
+    case HCS_CMD_DHW_ENABLE:
+      ot_.setDhwEnable(r.bool_value);
+      break;
+    case HCS_CMD_FLOW_SETPOINT:
+      ot_.setFlowSetpoint(r.float_value);
+      break;
+    case HCS_CMD_MAX_MODULATION:
+      ot_.setMaxModulation((int)r.int_value);
+      break;
+    case HCS_CMD_REBOOT:
+      delay(100);
+      ESP.restart();
+      break;
+    case HCS_CMD_OTA_URL:
+      if (ota_cb_ && payload.length()) ota_cb_(payload);
+      break;
+    default:
+      break;
   }
 }
 
@@ -112,11 +139,27 @@ static String f2(float v) {
   return String(buf);
 }
 
-void MqttBridge::publishTelemetry(const OtSnapshot& s) {
-  // --- Native HCS topics ---
-  publish(hcsTopic(node_id_, "online"), "online", true);
+void MqttBridge::publishDiscovery() {
+  // Retained discovery JSON for HA Firmware tab
+  String j = "{";
+  j += "\"node_id\":\"" + node_id_ + "\",";
+  j += "\"name\":\"" + (device_name_.length() ? device_name_ : node_id_) + "\",";
+  j += "\"board\":\"" + String(HCS_BOARD_NAME) + "\",";
+  j += "\"version\":\"" + String(HCS_FW_VERSION) + "\",";
+  j += "\"ip\":\"" + ip_ + "\",";
+  j += "\"ota_http\":\"http://" + ip_ + "/update\",";
+  j += "\"api_status\":\"http://" + ip_ + "/api/status\",";
+  j += "\"api_ota\":\"http://" + ip_ + "/api/ota\"";
+  j += "}";
+
+  publish(String("hcs/discovery/") + node_id_, j, true);
+  publish(hcsTopic(node_id_, "ip"), ip_, true);
+  publish(hcsTopic(node_id_, "board"), HCS_BOARD_NAME, true);
   publish(hcsTopic(node_id_, "version"), HCS_FW_VERSION, true);
-  publish(hcsTopic(node_id_, "protocol_version"), "1", true);
+}
+
+void MqttBridge::publishTelemetry(const OtSnapshot& s) {
+  publish(hcsTopic(node_id_, "online"), "online", true);
 
   if (s.valid) {
     publish(hcsTopic(node_id_, "flame"), s.flame ? "ON" : "OFF");
@@ -132,12 +175,11 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
       publish(hcsTopic(node_id_, "modulation"), f2(s.modulation));
   }
 
-  // Commanded values (always useful for debugging)
   publish(hcsTopic(node_id_, "cmd_ch"), ot_.chEnable() ? "on" : "off");
   publish(hcsTopic(node_id_, "cmd_flow_setpoint"), f2(ot_.flowSetpoint()));
   publish(hcsTopic(node_id_, "cmd_max_modulation"), String(ot_.maxModulation()));
 
-  // --- OTGW-firmware compatible subjects (Home Climate Control backend) ---
+  // OTGW-compat
   if (s.valid) {
     publish(otgwValue("flamestatus"), s.flame ? "ON" : "OFF");
     publish(otgwValue("chmodus"), s.ch_active ? "ON" : "OFF");

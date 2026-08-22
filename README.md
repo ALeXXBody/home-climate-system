@@ -13,29 +13,32 @@ License: **MIT**.
 
 - **DIYLess Master OpenTherm Shield** → boiler OT bus (master/thermostat)
 - **ESP8266 D1 mini** → stacks on the shield
-- **ESP32-S3-Zero** → jumper wires to the shield
+- **LOLIN / Wemos S2 mini** → D1-mini layout, same OT pins (GPIO4/5)
+- **ESP32-S3-Zero** → extra target; jumper wires to the shield
 
 See [docs/hardware.md](docs/hardware.md).
 
-## Firmware status (v0.1.0)
+## Firmware status (v0.2.0)
 
 PlatformIO project under `firmware/`:
 
 - OpenTherm master via **ihormelnyk/opentherm_library** (MIT)
-- WiFi + MQTT (PubSubClient)
-- Publishes **native `hcs/`** topics and **OTGW-compat** topics for HA
-- Accepts CH enable, flow setpoint, max modulation from MQTT
+- Captive portal (WiFiManager) + NVS settings
+- Device web UI (status / controls / settings) + ElegantOTA + ArduinoOTA
+- WiFi + MQTT (PubSubClient); native **`hcs/`** + **OTGW-compat** for HA
+- CH enable, flow setpoint, max modulation, DHW, reboot, OTA URL
 - CH **off at boot** (failsafe)
+- Targets: `d1_mini`, `lolin_s2_mini`, `esp32_d1_mini`, `esp32s3_zero`
 
-Not yet: captive portal / BLE provisioning, OTA UI in HA sidebar, slave/gateway mode.
+Not yet: HA sidebar OTA push end-to-end, slave/gateway mode, weather-comp curve on-device.
 
 ## Quick start
 
 ```bash
 cd firmware
-cp include/secrets.example.h include/secrets.h   # edit WiFi + MQTT
-pio run -e d1_mini -t upload                     # or esp32s3_zero
+pio run -e lolin_s2_mini -t upload   # or d1_mini / esp32s3_zero
 pio device monitor -b 115200
+# Join AP HCS-Setup / homeclimate → set WiFi + MQTT
 ```
 
 Full steps: [docs/flash.md](docs/flash.md).

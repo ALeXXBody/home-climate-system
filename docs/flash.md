@@ -3,19 +3,22 @@
 ## Prerequisites
 
 - [PlatformIO Core](https://docs.platformio.org/en/latest/core/installation.html) or PlatformIO IDE
-- USB cable for D1 mini or ESP32-S3-Zero
+- USB cable for D1 mini, LOLIN S2 mini, or ESP32-S3-Zero
 - MQTT broker reachable from the device (e.g. HA Mosquitto)
 - DIYLess Master OpenTherm Shield wired per [hardware.md](hardware.md)
 
-## 1. Secrets
+## 1. First boot (captive portal)
+
+Firmware **v0.2** opens AP **`HCS-Setup`** / password **`homeclimate`** when WiFi
+is not configured. Join it, open the portal, set home WiFi + MQTT, save.
+
+Optional compile-time seeds (gitignored):
 
 ```bash
 cd firmware
 cp include/secrets.example.h include/secrets.h
-# edit WIFI_SSID, WIFI_PASS, MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASS
+# edit WIFI_SSID, WIFI_PASS, MQTT_HOST, …
 ```
-
-`secrets.h` is gitignored.
 
 ## 2. Build
 
@@ -25,7 +28,10 @@ cd firmware
 # ESP8266 D1 mini (stacked on DIYLess Master shield)
 pio run -e d1_mini
 
-# ESP32-S3-Zero (jumper wires)
+# LOLIN / Wemos S2 mini (D1-mini layout, OT GPIO4/5)
+pio run -e lolin_s2_mini
+
+# ESP32-S3-Zero (jumper wires — extra target)
 pio run -e esp32s3_zero
 
 # Classic ESP32 D1 mini form factor
@@ -38,6 +44,9 @@ pio run -e esp32_d1_mini
 # D1 mini
 pio run -e d1_mini -t upload
 
+# S2 mini (native USB CDC; hold BOOT/0 if needed)
+pio run -e lolin_s2_mini -t upload
+
 # S3-Zero: hold BOOT, plug USB, then:
 pio run -e esp32s3_zero -t upload
 ```
@@ -45,10 +54,11 @@ pio run -e esp32s3_zero -t upload
 Serial monitor:
 
 ```bash
-pio device monitor -e d1_mini -b 115200
+pio device monitor -e lolin_s2_mini -b 115200
 ```
 
-You should see WiFi IP, MQTT node id (`hcs-<mac>`), and OT pin numbers.
+You should see board name, OT pins, then portal or WiFi IP + node id (`hcs-<mac>`).
+Device web UI: `http://<ip>/` (status, controls, settings, ElegantOTA).
 
 ## 4. MQTT smoke test
 
@@ -84,8 +94,8 @@ Telemetry subjects match OTGW-firmware names (`boilertemperature`, `flamestatus`
 
 | Symptom | Check |
 |---|---|
-| No WiFi | `secrets.h`, 2.4 GHz SSID |
-| No MQTT | broker IP, firewall, user/pass |
+| No WiFi | join `HCS-Setup` / `homeclimate`, 2.4 GHz SSID only |
+| No MQTT | portal MQTT host, broker IP, firewall, user/pass |
 | OT `valid=false` | wiring IN/OUT swapped?, boiler powered, OT cable |
-| S3 won't flash | hold BOOT while connecting USB-C |
+| S2/S3 won't flash | hold BOOT/0 while connecting USB-C |
 | CH never starts | publish `ch_enable=on` — boots failsafe off |
