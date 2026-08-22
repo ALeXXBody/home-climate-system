@@ -16,6 +16,7 @@ License: **MIT**.
 - **DIYLess Master OpenTherm Shield** → boiler OT bus (master/thermostat)
 - **ESP8266 D1 mini** → stacks on the shield
 - **LOLIN / Wemos S2 mini** → D1-mini layout, same OT pins (GPIO4/5)
+- **LOLIN C3 mini** → D1-mini form factor, jumper wires (GPIO4/5)
 - **ESP32-S3-Zero** → extra target; jumper wires to the shield
 
 See [docs/hardware.md](docs/hardware.md).
@@ -31,7 +32,7 @@ PlatformIO project under `firmware/`:
 - CH enable, flow setpoint, max modulation, DHW, reboot, OTA URL
 - Weather compensation: linear heating curve from boiler outdoor sensor
 - CH **off at boot** (failsafe)
-- Targets: `d1_mini`, `lolin_s2_mini`, `esp32_d1_mini`, `esp32s3_zero`
+- Targets: `d1_mini`, `lolin_s2_mini`, `lolin_c3_mini`, `esp32_d1_mini`, `esp32s3_zero` (+ `*_gw` gateway builds)
 
 Not yet: HA sidebar OTA push end-to-end, slave/gateway mode.
 

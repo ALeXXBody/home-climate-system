@@ -7,6 +7,7 @@
 | **DIYLess Master OpenTherm Shield** | Level-shifts MCU GPIO ↔ boiler OpenTherm bus (master / thermostat side) |
 | **ESP8266 D1 mini** | Stacks on the shield (DIYLESS designed for this) |
 | **LOLIN / Wemos S2 mini** | Same D1-mini layout family; OT pins match ESP8266 (GPIO4/5) |
+| **LOLIN C3 mini** | D1-mini form factor, different GPIO map — jumper OT_IN/OT_OUT |
 | **ESP32-S3-Zero** | Extra target; does **not** stack — jumper OT_IN / OT_OUT |
 
 The Master shield talks to the **boiler only** (replaces wall thermostat).  
@@ -64,9 +65,26 @@ Do **not** cover the ceramic antenna. USB-C for power/flash
 
 Firmware env: `esp32s3_zero` (`OT_IN=5`, `OT_OUT=6`).
 
+### D) LOLIN C3 mini (jumper wires)
+
+D1-mini form factor but a different GPIO map (C3 has only GPIO0–21; flash
+uses 11–17, USB 18/19, strapping 2/8/9, LED 7). Wire jumpers, do not stack:
+
+| Function | C3 mini pin | GPIO | Shield |
+|---|---|---|---|
+| OT receive (in) | any free IO | **GPIO4** | OT_IN |
+| OT transmit (out) | any free IO | **GPIO5** | OT_OUT |
+| GND | GND | — | GND |
+| 3V3 | 3V3 | — | 3V3 |
+
+Gateway build (`lolin_c3_mini_gw`) adds the thermostat-side interface on
+**GPIO6** (in) / **GPIO10** (out) — see docs/design-gateway.md.
+
+Firmware env: `lolin_c3_mini` (`OT_IN=4`, `OT_OUT=5`).
+
 Pins are build flags — change in `firmware/platformio.ini` if you rewire.
 
-### D) Classic ESP32 D1 mini form-factor
+### E) Classic ESP32 D1 mini form-factor
 
 DIYLESS sample uses **GPIO21 = IN**, **GPIO22 = OUT**.  
 Env: `esp32_d1_mini`.
