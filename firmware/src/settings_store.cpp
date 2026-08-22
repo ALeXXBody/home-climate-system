@@ -7,7 +7,8 @@ static Preferences prefs;
 #include <EEPROM.h>
 // Simple blob store on ESP8266
 static const int kEepromSize = 1024;
-static const uint32_t kMagic = 0x48435331;  // HCS1
+// v2: + weather-comp curve fields (v1 blobs fail magic and re-provision)
+static const uint32_t kMagic = 0x48435332;  // HCS2
 struct EepromBlob {
   uint32_t magic;
   uint16_t mqtt_port;
@@ -21,6 +22,11 @@ struct EepromBlob {
   char device_name[32];
   char ota_password[32];
   uint8_t configured;
+  uint8_t wc_enable;
+  float wc_t_out_ref;
+  float wc_t_out_design;
+  float wc_flow_max;
+  float wc_flow_min;
 };
 #endif
 
@@ -46,6 +52,11 @@ bool SettingsStore::load(HcsSettings& out) {
   out.otgw_node = prefs.getString("otgw_node", "hcs-device");
   out.device_name = prefs.getString("dev_name", "Home Climate System");
   out.ota_password = prefs.getString("ota_pass", "");
+  out.wc_enable = prefs.getBool("wc_en", false);
+  out.wc_t_out_ref = prefs.getFloat("wc_ref", 18.0f);
+  out.wc_t_out_design = prefs.getFloat("wc_dsn", -10.0f);
+  out.wc_flow_max = prefs.getFloat("wc_fmax", 65.0f);
+  out.wc_flow_min = prefs.getFloat("wc_fmin", 25.0f);
   return out.wifi_ssid.length() > 0;
 #elif defined(ESP8266)
   EepromBlob b{};
@@ -63,6 +74,11 @@ bool SettingsStore::load(HcsSettings& out) {
   if (!out.otgw_node.length()) out.otgw_node = "hcs-device";
   out.device_name = String(b.device_name);
   out.ota_password = String(b.ota_password);
+  out.wc_enable = b.wc_enable != 0;
+  out.wc_t_out_ref = b.wc_t_out_ref;
+  out.wc_t_out_design = b.wc_t_out_design;
+  out.wc_flow_max = b.wc_flow_max;
+  out.wc_flow_min = b.wc_flow_min;
   out.configured = true;
   return out.wifi_ssid.length() > 0;
 #endif
@@ -96,6 +112,11 @@ bool SettingsStore::save(const HcsSettings& in) {
   strncpy(b.otgw_node, in.otgw_node.c_str(), sizeof(b.otgw_node) - 1);
   strncpy(b.device_name, in.device_name.c_str(), sizeof(b.device_name) - 1);
   strncpy(b.ota_password, in.ota_password.c_str(), sizeof(b.ota_password) - 1);
+  b.wc_enable = in.wc_enable ? 1 : 0;
+  b.wc_t_out_ref = in.wc_t_out_ref;
+  b.wc_t_out_design = in.wc_t_out_design;
+  b.wc_flow_max = in.wc_flow_max;
+  b.wc_flow_min = in.wc_flow_min;
   EEPROM.put(0, b);
   return EEPROM.commit();
 #endif

@@ -40,6 +40,38 @@ static void onOtaUrl(const String& url) {
   net.startHttpUpdate(url);
 }
 
+static void applyWcSettings(const HcsSettings& s) {
+  ot.setWeatherComp(s.wc_enable);
+  char cfg[48];
+  snprintf(cfg, sizeof(cfg), "%.1f,%.1f,%.1f,%.1f", s.wc_t_out_ref,
+           s.wc_t_out_design, s.wc_flow_max, s.wc_flow_min);
+  ot.setWeatherCompCfg(cfg);
+}
+
+/** Persist WC changes made at runtime via MQTT/web (only when they differ). */
+static void syncWcFromDevice() {
+  static unsigned long last = 0;
+  unsigned long now = millis();
+  if (now - last < 5000) return;
+  last = now;
+
+  const HcsWeatherComp& c = ot.weatherCompCfg();
+  if (ot.weatherComp() == settings.wc_enable &&
+      c.t_out_ref == settings.wc_t_out_ref &&
+      c.t_out_design == settings.wc_t_out_design &&
+      c.flow_max == settings.wc_flow_max &&
+      c.flow_min == settings.wc_flow_min) return;
+
+  settings.wc_enable = ot.weatherComp();
+  settings.wc_t_out_ref = c.t_out_ref;
+  settings.wc_t_out_design = c.t_out_design;
+  settings.wc_flow_max = c.flow_max;
+  settings.wc_flow_min = c.flow_min;
+  SettingsStore store;
+  store.begin();
+  store.save(settings);
+}
+
 void setup() {
   Serial.begin(115200);
   delay(300);
@@ -82,6 +114,8 @@ void setup() {
   }
 #ifdef HCS_TEST_BOOT
   Serial.println(F("[dbg] post store"));
+#else
+  applyWcSettings(settings);
 #endif
 
 #ifdef HCS_TEST_BOOT
@@ -126,6 +160,7 @@ void loop() {
 
 #ifndef HCS_TEST_BOOT
   net.loop();
+  syncWcFromDevice();
 
   if (WiFi.status() != WL_CONNECTED) {
     // brief reconnect attempt; portal not re-opened automatically

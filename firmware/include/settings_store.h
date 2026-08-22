@@ -1,7 +1,8 @@
 #pragma once
-// Persistent settings (NVS Preferences on ESP32, EEPROM-emulated on ESP8266 via Preferences)
+// Persistent settings (NVS Preferences on ESP32, EEPROM blob on ESP8266)
 
 #include <Arduino.h>
+#include "hcs_weather_comp.h"
 
 struct HcsSettings {
   String wifi_ssid;
@@ -15,6 +16,13 @@ struct HcsSettings {
   String device_name = "Home Climate System";
   String ota_password = "";
   bool configured = false;
+
+  // Weather compensation curve
+  bool wc_enable = false;
+  float wc_t_out_ref = 18.0f;
+  float wc_t_out_design = -10.0f;
+  float wc_flow_max = 65.0f;
+  float wc_flow_min = 25.0f;
 };
 
 class SettingsStore {

@@ -31,7 +31,7 @@ PlatformIO project under `firmware/`:
 - CH **off at boot** (failsafe)
 - Targets: `d1_mini`, `lolin_s2_mini`, `esp32_d1_mini`, `esp32s3_zero`
 
-Not yet: HA sidebar OTA push end-to-end, slave/gateway mode, WC config persistence.
+Not yet: HA sidebar OTA push end-to-end, slave/gateway mode.
 
 ## Quick start
 

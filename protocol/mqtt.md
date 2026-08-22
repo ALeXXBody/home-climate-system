@@ -69,8 +69,8 @@ re-publishes discovery.
 **Weather compensation:** when enabled, the flow setpoint sent to the boiler
 follows a linear heating curve between `flow_min` at outdoor `ref` °C and
 `flow_max` at design outdoor `design` °C. Outdoor temp comes from the boiler
-(MsgID 27); without a valid reading the manual setpoint is used. Curve config
-is runtime-only for now (not persisted across reboot).
+(MsgID 27); without a valid reading the manual setpoint is used. WC state and
+curve config persist in NVS/EEPROM across reboots.
 
 ## OTGW-firmware compatibility
 
