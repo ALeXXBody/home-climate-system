@@ -5,8 +5,30 @@ Shared contract between **firmware** and **Home Climate Control**.
 ## Identity
 
 - Node id: `hcs-<mac>` (no colons, lowercase), printed on serial at boot.
-- Native prefix: `hcs` (configurable `MQTT_PREFIX`).
-- OTGW-compat prefix: `OTGW` / node `hcs-device` (configurable).
+- Native prefix: `hcs` (configurable `MQTT_PREFIX` / portal).
+- OTGW-compat prefix: `OTGW` / node `hcs-device` (configurable `otgw_node`).
+
+## Discovery (device → broker)
+
+Retained JSON on `hcs/discovery/<node_id>`:
+
+```json
+{
+  "node_id": "hcs-aabbccddeeff",
+  "name": "Home Climate System",
+  "board": "lolin_s2_mini",
+  "version": "0.2.0",
+  "ip": "192.168.x.y",
+  "ota_http": "http://192.168.x.y/update",
+  "api_status": "http://192.168.x.y/api/status",
+  "api_ota": "http://192.168.x.y/api/ota"
+}
+```
+
+Also retained: `hcs/<node>/ip`, `…/board`, `…/version`.
+
+Ping all devices: publish any payload to `hcs/discovery/ping` → each node
+re-publishes discovery.
 
 ## Native topics (`hcs/<node>/…`)
 
@@ -16,7 +38,8 @@ Shared contract between **firmware** and **Home Climate Control**.
 |---|---|
 | `…/online` | `online` / `offline` (LWT retained) |
 | `…/version` | firmware version string |
-| `…/protocol_version` | `1` |
+| `…/board` | board env name |
+| `…/ip` | device IP |
 | `…/outdoor_temp` | °C |
 | `…/flow_temp` | °C (boiler water) |
 | `…/return_temp` | °C |
@@ -32,10 +55,12 @@ Shared contract between **firmware** and **Home Climate Control**.
 
 | Topic | Payload |
 |---|---|
-| `…/set/ch_enable` | `on` / `off` |
-| `…/set/dhw_enable` | `on` / `off` |
-| `…/set/flow_setpoint` | float °C (0.5 steps) |
-| `…/set/max_modulation` | 0–100 |
+| `…/set/ch_enable` | `on` / `off` / `1` / `0` / `true` / `false` |
+| `…/set/dhw_enable` | same |
+| `…/set/flow_setpoint` | float °C |
+| `…/set/max_modulation` | 0–100 (clamped) |
+| `…/set/reboot` | any |
+| `…/set/ota_url` | `http(s)://…/firmware.bin` |
 
 ## OTGW-firmware compatibility
 
@@ -57,8 +82,8 @@ So the existing Home Climate Control **OTGW MQTT** backend works unchanged:
 
 | Topic | Payload |
 |---|---|
-| `OTGW/set/hcs-device/chenable` | `on`/`off` |
-| `OTGW/set/hcs-device/ctrlsetpt` | float °C |
-| `OTGW/set/hcs-device/maxmodulation` | 0–100 |
+| `OTGW/set/<otgw_node>/chenable` | `on`/`off` |
+| `OTGW/set/<otgw_node>/ctrlsetpt` | float °C |
+| `OTGW/set/<otgw_node>/maxmodulation` | 0–100 |
 
-Change `OTGW_COMPAT_NODE` if you use a different node id in HA config.
+Default `otgw_node` is `hcs-device` (portal / NVS).

@@ -46,8 +46,9 @@ Firmware pin maps already shipped in `platformio.ini`:
 | Env | OT_IN | OT_OUT |
 |---|---|---|
 | `d1_mini` (ESP8266) | GPIO4 (D2) | GPIO5 (D1) |
+| `lolin_s2_mini` (primary ESP32) | GPIO4 | GPIO5 |
 | `esp32_d1_mini` | GPIO21 | GPIO22 |
-| `esp32s3_zero` | GPIO5 | GPIO6 |
+| `esp32s3_zero` (extra) | GPIO5 | GPIO6 |
 
 ## BOM
 
