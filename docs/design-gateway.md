@@ -15,7 +15,8 @@ work; see [`license-otgw.md`](license-otgw.md) for why no GPL sources are used.
 >   "master_only after 10 s" idea below — simpler, mode switch always reboots)
 > - MQTT: `gw/mode`, `gw/set_mode`, `gw/tstat_online`, `gw/override_setpoint`
 > - Web UI: Gateway tab (mode switch + reboot, live counters, override)
-> - Still open: bench loopback (needs hardware)
+> - Still open: bench loopback (needs hardware) — turnkey checklist in
+>   [`bench-loopback.md`](bench-loopback.md)
 
 ## 1. Problem
 
