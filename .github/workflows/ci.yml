@@ -25,8 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-        matrix:
-          env: [d1_mini, lolin_s2_mini, lolin_c3_mini, esp32_d1_mini, esp32s3_zero, lolin_s2_mini_gw, esp32_d1_mini_gw, lolin_c3_mini_gw]
+      matrix:
+        env: [d1_mini, lolin_s2_mini, lolin_c3_mini, esp32_d1_mini, esp32s3_zero, lolin_s2_mini_gw, esp32_d1_mini_gw, lolin_c3_mini_gw]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
