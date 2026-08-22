@@ -189,6 +189,17 @@ a{color:#03a9f4;text-decoration:none}
 <label>Max modulation (%) <b id=mmlbl></b></label>
 <input type=range id=mm min=0 max=100 step=5 oninput="mmlbl.textContent=' '+this.value+'%'"
  onchange="ctl({max_modulation:+this.value})">
+</div>
+<div class=card style=margin-top:10px>
+<label>Weather compensation <b id=wclbl></b></label>
+<div class=row><button class=a onclick="ctl({weather_comp:true})">WC on</button>
+<button class=g onclick="ctl({weather_comp:false})">WC off</button>
+<span style="margin-left:auto">target: <b id=wct>&mdash;</b> &deg;C</span></div>
+<div class=row><span style=flex:1><label>Ref &deg;C</label><input id=wc_ref type=number step=1></span>
+<span style=flex:1><label>Design &deg;C</label><input id=wc_design type=number step=1></span></div>
+<div class=row><span style=flex:1><label>Flow max</label><input id=wc_fmax type=number step=1 min=20 max=90></span>
+<span style=flex:1><label>Flow min</label><input id=wc_fmin type=number step=1 min=10 max=80></span></div>
+<button class=a onclick="applyWc()">Apply curve</button>
 </div></section>
 <section id=t-settings>
 <div class=card>
@@ -249,7 +260,12 @@ function paint(s){
  if(document.activeElement&&document.activeElement.id!=='isfp'&&document.activeElement.id!=='rsfp'){
    isfp.value=s.flow_setpoint;if(+rsfp.value!==+s.flow_setpoint)rsfp.value=s.flow_setpoint;}
  mm.value=s.max_modulation;mmlbl.textContent=' '+s.max_modulation+'%';
+ wclbl.textContent=s.wc_enable?' ON':' OFF';wct.textContent=s.wc_target??'—';
+ if(!['wc_ref','wc_design','wc_fmax','wc_fmin'].includes(document.activeElement?.id)){
+  wc_ref.value=s.wc_ref;wc_design.value=s.wc_design;wc_fmax.value=s.wc_fmax;wc_fmin.value=s.wc_fmin;}
 }
+function applyWc(){ctl({wc_ref:+wc_ref.value,wc_design:+wc_design.value,
+ wc_fmax:+wc_fmax.value,wc_fmin:+wc_fmin.value})}
 async function refresh(){try{paint(await jget('/api/status'))}catch(e){$('otb').textContent='API err'}}
 function ctl(b){jpost('/api/control',b).then(refresh)}
 function show(t){
@@ -309,6 +325,13 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     j += "\"flame\":" + String(s.flame ? "true" : "false") + ",";
     j += "\"flow_setpoint\":" + String(ot_.flowSetpoint(), 1) + ",";
     j += "\"max_modulation\":" + String(ot_.maxModulation());
+    const HcsWeatherComp& wc = ot_.weatherCompCfg();
+    j += ",\"wc_enable\":" + String(ot_.weatherComp() ? "true" : "false");
+    j += ",\"wc_ref\":" + String(wc.t_out_ref, 1);
+    j += ",\"wc_design\":" + String(wc.t_out_design, 1);
+    j += ",\"wc_fmax\":" + String(wc.flow_max, 1);
+    j += ",\"wc_fmin\":" + String(wc.flow_min, 1);
+    if (!isnan(ot_.wcTarget())) j += ",\"wc_target\":" + String(ot_.wcTarget(), 1);
     if (!isnan(s.flow_temp)) j += ",\"flow_temp\":" + String(s.flow_temp, 1);
     if (!isnan(s.return_temp))
       j += ",\"return_temp\":" + String(s.return_temp, 1);
@@ -332,6 +355,19 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
       ot_.setFlowSetpoint(constrain(d["flow_setpoint"].as<float>(), 20.0f, 90.0f));
     if (!d["max_modulation"].isNull())
       ot_.setMaxModulation(constrain(d["max_modulation"].as<int>(), 0, 100));
+    if (!d["weather_comp"].isNull()) ot_.setWeatherComp(d["weather_comp"].as<bool>());
+    if (!(d["wc_ref"].isNull() && d["wc_design"].isNull() &&
+          d["wc_fmax"].isNull() && d["wc_fmin"].isNull())) {
+      HcsWeatherComp wc = ot_.weatherCompCfg();
+      if (!d["wc_ref"].isNull()) wc.t_out_ref = d["wc_ref"].as<float>();
+      if (!d["wc_design"].isNull()) wc.t_out_design = d["wc_design"].as<float>();
+      if (!d["wc_fmax"].isNull()) wc.flow_max = d["wc_fmax"].as<float>();
+      if (!d["wc_fmin"].isNull()) wc.flow_min = d["wc_fmin"].as<float>();
+      char csv[48];
+      snprintf(csv, sizeof(csv), "%.1f,%.1f,%.1f,%.1f", wc.t_out_ref,
+               wc.t_out_design, wc.flow_max, wc.flow_min);
+      ot_.setWeatherCompCfg(csv);  // invalid combos are rejected atomically
+    }
     server.send(200, "application/json", "{\"ok\":true}");
   });
 
