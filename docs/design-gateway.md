@@ -1,9 +1,19 @@
 # Design — Gateway mode (thermostat ⇄ HCS ⇄ boiler)
 
-Status: **draft for review** · Target firmware: v0.3.x
+Status: **M1+M2 implemented (passthrough core, ESP32-only builds)** · Target firmware: v0.3.x
 License stance: original work; OpenTherm protocol behaviour follows the
 public spec (v2.2+). Ideas (not code) informed by how gateways generally
 work; see [`license-otgw.md`](license-otgw.md) for why no GPL sources are used.
+
+> Implementation status:
+> - `include/hcs_gateway.h` — portable router core, 9 native tests (FORWARD /
+>   local-answer / setpoint override / f8.8 helpers)
+> - `ot_slave.*` + `ot_gateway.h/.cpp` — slave endpoint + glue, compiled only
+>   under `HCS_GW_ENABLE` on ESP32 envs (`lolin_s2_mini_gw`, `esp32_d1_mini_gw`)
+> - `/api/status` exposes a `gw:{requests,forwarded,answered_local,modified,errors}`
+>   block when the gateway build is active
+> - Still open: bench loopback (needs hardware), MQTT gw topics, web UI tab,
+>   mode persistence
 
 ## 1. Problem
 

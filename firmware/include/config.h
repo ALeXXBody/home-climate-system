@@ -51,6 +51,14 @@
 #define OT_OUT_PIN 5
 #endif
 
+// Second (thermostat-side) interface — gateway builds only
+#ifndef OT2_IN_PIN
+#define OT2_IN_PIN 16
+#endif
+#ifndef OT2_OUT_PIN
+#define OT2_OUT_PIN 17
+#endif
+
 #define OT_STATUS_INTERVAL_MS 1000
 #define MQTT_RECONNECT_MS 5000
 #define TELEMETRY_INTERVAL_MS 2000

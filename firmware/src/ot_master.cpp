@@ -43,7 +43,47 @@ bool OtMaster::setWeatherCompCfg(const char* csv) {
   return true;
 }
 
+#ifdef HCS_GW_ENABLE
+unsigned long OtMaster::sendRaw(unsigned long frame) {
+  unsigned long resp = ot_.sendRequest(frame);
+  if (ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS) {
+    snap_.valid = true;
+    snap_.last_ok_ms = millis();
+    if (OpenTherm::getMessageType(resp) >= OpenThermMessageType::READ_ACK) {
+      // keep telemetry fields fresh from forwarded traffic where possible
+      switch ((int)OpenTherm::getDataID(resp)) {
+        case (int)OpenThermMessageID::Tboiler:
+          snap_.flow_temp = OpenTherm::getFloat(resp);
+          break;
+        case (int)OpenThermMessageID::Tret:
+          snap_.return_temp = OpenTherm::getFloat(resp);
+          break;
+        case (int)OpenThermMessageID::RelModLevel:
+          snap_.modulation = OpenTherm::getFloat(resp);
+          break;
+        default:
+          break;
+      }
+    }
+    // Status responses carry flame/fault/ch flags
+    if (OpenTherm::getDataID(resp) == OpenThermMessageID::Status &&
+        OpenTherm::getMessageType(resp) == OpenThermMessageType::READ_ACK) {
+      snap_.fault = OpenTherm::isFault(resp);
+      snap_.ch_active = OpenTherm::isCentralHeatingActive(resp);
+      snap_.dhw_active = OpenTherm::isHotWaterActive(resp);
+      snap_.flame = OpenTherm::isFlameOn(resp);
+    }
+  } else {
+    snap_.valid = false;
+  }
+  return resp;
+}
+#endif
+
 void OtMaster::poll() {
+#ifdef HCS_GW_ENABLE
+  if (!autopoll_) return;
+#endif
   unsigned long now = millis();
   if (now - last_poll_ms_ < OT_STATUS_INTERVAL_MS) {
     return;

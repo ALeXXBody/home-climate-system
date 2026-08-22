@@ -51,6 +51,16 @@ class OtMaster {
   /** Run one master transaction cycle (status + reads). ~1 Hz. */
   void poll();
 
+#ifdef HCS_GW_ENABLE
+  /** Gateway mode: demand-driven raw transaction; updates link health. */
+  unsigned long sendRaw(unsigned long frame);
+  OpenThermResponseStatus lastRawStatus() {
+    return ot_.getLastResponseStatus();
+  }
+  /** Disable the autonomous ~1 Hz status cycle while gateway drives the bus. */
+  void setAutopoll(bool on) { autopoll_ = on; }
+#endif
+
  private:
   OpenTherm ot_;
   bool ch_enable_ = false;
@@ -61,6 +71,9 @@ class OtMaster {
   float wc_target_ = NAN;
   OtSnapshot snap_;
   unsigned long last_poll_ms_ = 0;
+#ifdef HCS_GW_ENABLE
+  bool autopoll_ = true;
+#endif
 
   static void handleInterrupt();
   static OtMaster* instance_;

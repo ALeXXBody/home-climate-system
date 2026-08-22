@@ -20,6 +20,13 @@
 #include "settings_store.h"
 #include "net_services.h"
 
+#ifdef HCS_GW_ENABLE
+#if !defined(ESP32)
+#error "HCS_GW_ENABLE requires ESP32 (gateway is ESP32-only)"
+#endif
+#include "ot_gateway.h"
+#endif
+
 static OtMaster ot(OT_IN_PIN, OT_OUT_PIN);
 static WiFiClient wifiClient;
 static MqttBridge mqtt(wifiClient, ot);
@@ -27,6 +34,10 @@ static NetServices net(ot);
 static SettingsStore store;
 static HcsSettings settings;
 static String nodeId;
+
+#ifdef HCS_GW_ENABLE
+static hcs::OtGateway gw(ot, OT2_IN_PIN, OT2_OUT_PIN);
+#endif
 
 static String makeNodeId() {
   String m = WiFi.macAddress();
@@ -148,6 +159,14 @@ void setup() {
     Serial.println(F("[mqtt] no broker configured — portal MQTT host empty"));
   }
 
+#ifdef HCS_GW_ENABLE
+  ot.setAutopoll(false);  // master bus is driven by gateway forwarding now
+  gw.begin();
+  net.setGateway(&gw);
+  Serial.printf("[gw] gateway up — thermostat bus %d/%d\n", OT2_IN_PIN,
+                OT2_OUT_PIN);
+#endif
+
   Serial.println(F("[boot] ready — open http://device-ip/ for status & OTA"));
 #endif
 }
@@ -176,7 +195,11 @@ void loop() {
   }
 #endif
 
-  ot.poll();
+#ifdef HCS_GW_ENABLE
+  gw.loop();     // answers thermostat + forwards to boiler on demand
+#else
+  ot.poll();     // autonomous ~1 Hz master cycle (master-only builds)
+#endif
 
 #ifdef HCS_TEST_BOOT
   if (millis() - last_tick >= 2000) {

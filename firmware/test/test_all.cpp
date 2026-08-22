@@ -1,6 +1,7 @@
 #include <math.h>
 #include <unity.h>
 #include "hcs_commands.h"
+#include "hcs_gateway.h"
 #include "hcs_weather_comp.h"
 
 void setUp(void) {}
@@ -194,6 +195,101 @@ void test_wc_cfg_failure_leaves_struct_untouched(void) {
   TEST_ASSERT_FLOAT_WITHIN(0.01, before.flow_max, wc.flow_max);
 }
 
+// ==================== gateway router ====================
+static const uint16_t kSet45 = 45 * 256;  // f8.8
+
+void test_gw_forward_passthrough_by_default(void) {
+  hcs::GatewayRouter r;
+  uint16_t out = 0;
+  TEST_ASSERT_EQUAL(hcs::GwPolicy::Forward,
+                    r.route(hcs::kTypeReadData, hcs::kIdStatus, 0x0100, &out));
+  TEST_ASSERT_EQUAL_HEX16(0x0100, out);
+  TEST_ASSERT_EQUAL(1, r.counters().requests);
+  TEST_ASSERT_EQUAL(1, r.counters().forwarded);
+  TEST_ASSERT_EQUAL(0, r.counters().modified);
+}
+
+void test_gw_setpoint_override_rewrites_tset(void) {
+  hcs::GatewayRouter r;
+  r.setOverrideSetpointC(50.0f);
+  uint16_t out = 0;
+  TEST_ASSERT_EQUAL(hcs::GwPolicy::Forward,
+                    r.route(hcs::kTypeWriteData, hcs::kIdTSet, kSet45, &out));
+  TEST_ASSERT_EQUAL_HEX16(50 * 256, out);
+  TEST_ASSERT_EQUAL(1, r.counters().modified);
+  // same payload again -> no double count
+  r.route(hcs::kTypeWriteData, hcs::kIdTSet, 50 * 256, &out);
+  TEST_ASSERT_EQUAL(1, r.counters().modified);
+}
+
+void test_gw_override_ignores_other_ids_and_reads(void) {
+  hcs::GatewayRouter r;
+  r.setOverrideSetpointC(60.0f);
+  uint16_t out = 0xFFFF;
+  r.route(hcs::kTypeWriteData, hcs::kIdStatus, kSet45, &out);   // wrong id
+  TEST_ASSERT_EQUAL_HEX16(kSet45, out);
+  r.route(hcs::kTypeReadData, hcs::kIdTSet, kSet45, &out);      // read, not write
+  TEST_ASSERT_EQUAL_HEX16(kSet45, out);
+  TEST_ASSERT_EQUAL(0, r.counters().modified);
+}
+
+void test_gw_override_disable_with_nan(void) {
+  hcs::GatewayRouter r;
+  r.setOverrideSetpointC(55.0f);
+  r.setOverrideSetpointC((float)NAN);
+  uint16_t out = 0;
+  r.route(hcs::kTypeWriteData, hcs::kIdTSet, kSet45, &out);
+  TEST_ASSERT_EQUAL_HEX16(kSet45, out);
+}
+
+void test_gw_link_down_answers_local_from_cache(void) {
+  hcs::GatewayRouter r;
+  r.noteBoilerResponse(hcs::kTypeReadAck, hcs::kIdTSet, kSet45);
+  r.setBoilerLinkUp(false);
+  uint16_t out = 0;
+  TEST_ASSERT_EQUAL(hcs::GwPolicy::AnswerLocal,
+                    r.route(hcs::kTypeReadData, hcs::kIdTSet, 0, &out));
+  TEST_ASSERT_TRUE(r.local_answer_known());
+  TEST_ASSERT_EQUAL_HEX16(kSet45, out);
+  TEST_ASSERT_EQUAL(1, r.counters().answered_local);
+  TEST_ASSERT_EQUAL(0, r.counters().forwarded);
+}
+
+void test_gw_link_down_unknown_id_is_unsupported_local(void) {
+  hcs::GatewayRouter r;
+  r.setBoilerLinkUp(false);
+  uint16_t out = 1234;
+  TEST_ASSERT_EQUAL(hcs::GwPolicy::AnswerLocal,
+                    r.route(hcs::kTypeWriteData, 42, 7, &out));
+  TEST_ASSERT_FALSE(r.local_answer_known());
+  TEST_ASSERT_EQUAL(0, r.counters().forwarded);
+}
+
+void test_gw_cache_skips_invalid_responses(void) {
+  hcs::GatewayRouter r;
+  r.noteBoilerResponse(hcs::kTypeDataInvalid, hcs::kIdTSet, kSet45);
+  r.noteBoilerResponse(hcs::kTypeUnknownDataId, hcs::kIdStatus, 0x11);
+  r.setBoilerLinkUp(false);
+  uint16_t out = 0;
+  r.route(hcs::kTypeReadData, hcs::kIdTSet, 0, &out);
+  TEST_ASSERT_FALSE(r.local_answer_known());
+}
+
+void test_gw_link_up_always_forwards_even_if_cached(void) {
+  hcs::GatewayRouter r;
+  r.noteBoilerResponse(hcs::kTypeReadAck, hcs::kIdTSet, kSet45);
+  uint16_t out = 0;
+  TEST_ASSERT_EQUAL(hcs::GwPolicy::Forward,
+                    r.route(hcs::kTypeWriteData, hcs::kIdTSet, 40 * 256, &out));
+  TEST_ASSERT_EQUAL_HEX16(40 * 256, out);
+}
+
+void test_gw_f88_roundtrip(void) {
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 45.0f, hcs::f88_decode(hcs::f88_encode(45.0f)));
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, -0.5f + 0.5f, hcs::f88_decode(hcs::f88_encode(-3.0f)));  // clamped to 0
+  TEST_ASSERT_EQUAL_HEX16(0xFFFF, hcs::f88_encode(999.0f));                                 // clamp high
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_ch_enable_on_variants);
@@ -220,5 +316,14 @@ int main(void) {
   RUN_TEST(test_wc_cfg_parse_rejects_contradictory);
   RUN_TEST(test_wc_cfg_design_below_reference_is_valid);
   RUN_TEST(test_wc_cfg_failure_leaves_struct_untouched);
+  RUN_TEST(test_gw_forward_passthrough_by_default);
+  RUN_TEST(test_gw_setpoint_override_rewrites_tset);
+  RUN_TEST(test_gw_override_ignores_other_ids_and_reads);
+  RUN_TEST(test_gw_override_disable_with_nan);
+  RUN_TEST(test_gw_link_down_answers_local_from_cache);
+  RUN_TEST(test_gw_link_down_unknown_id_is_unsupported_local);
+  RUN_TEST(test_gw_cache_skips_invalid_responses);
+  RUN_TEST(test_gw_link_up_always_forwards_even_if_cached);
+  RUN_TEST(test_gw_f88_roundtrip);
   return UNITY_END();
 }

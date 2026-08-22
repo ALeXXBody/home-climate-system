@@ -25,6 +25,9 @@ Master shield = device is the **thermostat** (not a man-in-the-middle gateway).
 | `settings_store.*` | NVS (ESP32) / EEPROM blob (ESP8266) for WiFi/MQTT/settings |
 | `hcs_commands.h` | Portable command parser (host-tested via `pio test -e native`) |
 | `hcs_weather_comp.h` | Heating-curve math + CSV config parser (host-tested) |
+| `hcs_gateway.h` | Gateway router core: policies, overrides, cache (host-tested) |
+| `ot_slave.*` | Thermostat-bus slave endpoint (ESP32 gateway builds) |
+| `ot_gateway.h/.cpp` | Gateway glue: route/forward/local-answer state machine (ESP32) |
 | `config.h` | Pins, intervals, defaults, portal AP name |
 | `topics.h` | Topic string helpers |
 | `secrets.h` | Optional compile-time WiFi/MQTT seeds (local only) |
@@ -40,10 +43,15 @@ Master shield = device is the **thermostat** (not a man-in-the-middle gateway).
 
 | Env | MCU | OT_IN | OT_OUT | Notes |
 |---|---|---|---|---|
-| `d1_mini` | ESP8266 | 4 (D2) | 5 (D1) | Stacks on DIYLess Master |
+| `d1_mini` | ESP8266 | 4 (D2) | 5 (D1) | Stacks on DIYLess Master (basic tier) |
 | `lolin_s2_mini` | ESP32-S2 | 4 | 5 | Primary ESP32; D1-mini layout |
 | `esp32_d1_mini` | ESP32 | 21 | 22 | Classic D1 mini ESP32 |
 | `esp32s3_zero` | ESP32-S3 | 5 | 6 | Extra; jumper wires |
+| `lolin_s2_mini_gw` | ESP32-S2 | 4/5 + 16/17 | — | Gateway build (`HCS_GW_ENABLE`) |
+| `esp32_d1_mini_gw` | ESP32 | 21/22 + 26/27 | — | Gateway build (`HCS_GW_ENABLE`) |
+
+**Tiers:** ESP8266 = basic (master thermostat only). ESP32 = advanced (adds
+weather compensation UI parity + optional gateway mode via `*_gw` envs).
 
 ## Dependencies (MIT-friendly)
 

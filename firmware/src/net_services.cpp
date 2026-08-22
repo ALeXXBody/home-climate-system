@@ -1,5 +1,8 @@
 #include "net_services.h"
 #include "config.h"
+#if defined(ESP32) && defined(HCS_GW_ENABLE)
+#include "ot_gateway.h"
+#endif
 
 #include <WiFiManager.h>
 #include <ArduinoOTA.h>
@@ -332,6 +335,18 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     j += ",\"wc_fmax\":" + String(wc.flow_max, 1);
     j += ",\"wc_fmin\":" + String(wc.flow_min, 1);
     if (!isnan(ot_.wcTarget())) j += ",\"wc_target\":" + String(ot_.wcTarget(), 1);
+#if defined(ESP32) && defined(HCS_GW_ENABLE)
+    if (gw_) {
+      const hcs::GwCounters& c = gw_->counters();
+      j += ",\"gw\":{";
+      j += "\"requests\":" + String(c.requests) + ",";
+      j += "\"forwarded\":" + String(c.forwarded) + ",";
+      j += "\"answered_local\":" + String(c.answered_local) + ",";
+      j += "\"modified\":" + String(c.modified) + ",";
+      j += "\"errors\":" + String(c.errors);
+      j += "}";
+    }
+#endif
     if (!isnan(s.flow_temp)) j += ",\"flow_temp\":" + String(s.flow_temp, 1);
     if (!isnan(s.return_temp))
       j += ",\"return_temp\":" + String(s.return_temp, 1);
