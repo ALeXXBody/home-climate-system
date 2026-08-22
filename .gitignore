@@ -9,3 +9,5 @@ firmware/.pio/
 firmware/include/secrets.h
 *.bin
 *.elf
+# but ship the flasher images to GitHub Pages
+!docs/flasher/**/*.bin
