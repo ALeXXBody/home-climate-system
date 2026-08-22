@@ -1,0 +1,14 @@
+Ref,Value,Footprint,Qty,Notes
+U1,U2,PC817,DIP-4,U2 = RX opto (bus→MCU); U1 = TX opto (MCU→bus)
+Q1,BC858A,SOT-23 or TO-92,1,PNP bus-current shunt
+D1,"1N4148 x4",DO-35,4,Bus polarity bridge (OT-A/OT-B -> BR+)
+D2,Zener 15V,DO-35,1,VBUS+ rail clamp
+D3,Zener 4V3,DO-35,1,RX threshold shaping
+D4,Zener 4V7,DO-35,1,RX threshold / LED protection
+R1,100R 1/4W 5%,AXIAL-0.3,1,Bridge series limit (BR+ -> VBUS+)
+R2,220R 1/4W 5%,AXIAL-0.3,1,RX chain series (VBUS+ -> U2 LED)
+R3,10k 1/4W 5%,AXIAL-0.3,1,RX pullup to +3V3
+R4,330R 1/4W 5%,AXIAL-0.3,1,TX opto LED series (TX -> U1 LED)
+R5,1k5 1/4W 5%,AXIAL-0.3,1,Q1 base resistor (U1 C -> Q1 B)
+J1,"1x4 2.54mm header",PINHEAD_4,1,"1=+3V3,2=GND,3=RX(OT_IN),4=TX(OT_OUT)"
+J2,2-way screw terminal 5mm,TB_2,1,"OT-A,OT-B to boiler"

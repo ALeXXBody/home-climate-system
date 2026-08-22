@@ -1,0 +1,167 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 640" font-family="Helvetica,Arial,sans-serif">
+  <style>
+    .w{stroke:#111;stroke-width:2;fill:none}
+    .r{stroke:#c62828;stroke-width:2;fill:none}
+    .lbl{font-size:14px;fill:#111}
+    .net{font-size:13px;fill:#c62828;font-weight:bold}
+    .ref{font-size:12px;fill:#1565c0;font-weight:bold}
+    .val{font-size:11px;fill:#444}
+    .box{fill:#fff;stroke:#111;stroke-width:2}
+    .dot{fill:#111}
+  </style>
+
+  <rect width="1080" height="640" fill="#fafafa"/>
+  <text x="30" y="34" class="lbl" style="font-size:18px;font-weight:bold">HCS OT-Direct &#8212; ESP32/ESP8266 &#8594; OpenTherm master front-end (v0.1)</text>
+  <text x="30" y="54" class="val">Jellybean parts &#183; common GND &#183; full netlist in README.md &#183; original work, MIT &#169; ALeXXBody</text>
+
+  <!-- ================= rails ================= -->
+  <line x1="160" y1="580" x2="1025" y2="580" class="w"/>
+  <line x1="160" y1="572" x2="160" y2="588" class="w"/><line x1="166" y1="578" x2="154" y2="578" class="w"/><line x1="164" y1="584" x2="156" y2="584" class="w"/>
+  <line x1="180" y1="100" x2="550" y2="100" class="r"/>
+  <text x="195" y="92" class="net">+3V3</text>
+  <line x1="560" y1="170" x2="800" y2="170" class="r"/>
+  <text x="565" y="160" class="net">VBUS+</text>
+  <line x1="110" y1="250" x2="760" y2="250" class="w"/>
+  <text x="180" y="242" class="net">RX &#8594; MCU OT_IN</text>
+
+  <!-- ================= J1 MCU header ================= -->
+  <rect x="40" y="130" width="70" height="170" class="box"/>
+  <text x="48" y="122" class="ref">J1</text>
+  <text x="48" y="155" class="lbl">+3V3</text>
+  <text x="48" y="205" class="lbl">GND</text>
+  <text x="48" y="255" class="lbl">RX</text>
+  <text x="48" y="305" class="lbl">TX</text>
+  <line x1="110" y1="150" x2="180" y2="150" class="r"/>
+  <line x1="180" y1="150" x2="180" y2="100" class="r"/>
+  <line x1="110" y1="200" x2="160" y2="200" class="w"/>
+  <line x1="160" y1="200" x2="160" y2="580" class="w"/>
+  <circle cx="160" cy="580" r="3" class="dot"/>
+
+  <!-- ================= TX path ================= -->
+  <line x1="110" y1="300" x2="210" y2="300" class="w"/>
+  <text x="212" y="282" class="ref">R4</text><text x="216" y="330" class="val">330R</text>
+  <rect x="210" y="290" width="70" height="20" class="w"/>
+  <line x1="280" y1="300" x2="330" y2="300" class="w"/>
+
+  <!-- U1 PC817 TX -->
+  <rect x="330" y="260" width="130" height="120" rx="10" class="box"/>
+  <text x="336" y="252" class="ref">U1 PC817 (TX)</text>
+  <polygon points="350,288 350,312 376,300" fill="#111"/>
+  <line x1="376" y1="286" x2="376" y2="314" class="w"/>
+  <path d="M352 284 l14 -12 M366 296 l14 -12" stroke="#111" stroke-width="1.5" fill="none"/>
+  <circle cx="420" cy="320" r="24" class="w"/>
+  <line x1="444" y1="308" x2="460" y2="290" class="w"/>
+  <line x1="444" y1="332" x2="460" y2="355" class="w"/>
+  <text x="316" y="304" class="val">A</text>
+  <text x="316" y="356" class="val">K</text>
+  <line x1="330" y1="350" x2="310" y2="350" class="w"/>
+  <line x1="310" y1="350" x2="310" y2="580" class="w"/>
+  <circle cx="310" cy="580" r="3" class="dot"/>
+  <line x1="460" y1="290" x2="500" y2="290" class="w"/>
+  <text x="466" y="282" class="val">C</text>
+  <line x1="460" y1="355" x2="505" y2="355" class="w"/>
+  <text x="466" y="372" class="val">E</text>
+  <line x1="505" y1="355" x2="505" y2="580" class="w"/>
+  <circle cx="505" cy="580" r="3" class="dot"/>
+
+  <text x="500" y="272" class="ref">R5</text><text x="504" y="322" class="val">1k5</text>
+  <rect x="500" y="280" width="70" height="20" class="w"/>
+  <line x1="570" y1="290" x2="600" y2="290" class="w"/>
+
+  <!-- Q1 PNP -->
+  <circle cx="645" cy="260" r="26" class="w"/>
+  <line x1="600" y1="290" x2="624" y2="276" class="w"/>
+  <polygon points="624,276 638,269 632,281" fill="#111"/>
+  <text x="676" y="278" class="ref">Q1 BC858A</text>
+  <line x1="645" y1="234" x2="645" y2="170" class="w"/>
+  <text x="652" y="192" class="val">E</text>
+  <circle cx="645" cy="170" r="3" class="dot"/>
+  <line x1="645" y1="286" x2="645" y2="580" class="w"/>
+  <text x="652" y="330" class="val">C</text>
+  <circle cx="645" cy="580" r="3" class="dot"/>
+
+  <!-- ================= RX threshold chain (down from VBUS+ into U2 LED) ================= -->
+  <line x1="555" y1="170" x2="555" y2="205" class="r"/>
+  <circle cx="555" cy="170" r="3" class="dot"/>
+  <rect x="545" y="205" width="20" height="50" class="w"/>
+  <text x="573" y="232" class="ref">R2</text><text x="573" y="248" class="val">220R</text>
+  <polygon points="546,268 564,268 555,294" fill="#111"/>
+  <line x1="545" y1="294" x2="565" y2="294" class="w"/>
+  <path d="M549 300 l8 -6 M559 300 l8 -6" stroke="#111" stroke-width="1.5" fill="none"/>
+  <text x="573" y="288" class="ref">D4 4V7</text>
+  <line x1="555" y1="304" x2="555" y2="310" class="w"/>
+  <polygon points="546,310 564,310 555,336" fill="#111"/>
+  <line x1="545" y1="336" x2="565" y2="336" class="w"/>
+  <path d="M549 342 l8 -6 M559 342 l8 -6" stroke="#111" stroke-width="1.5" fill="none"/>
+  <text x="573" y="330" class="ref">D3 4V3</text>
+  <line x1="555" y1="342" x2="555" y2="390" class="w"/>
+  <polyline points="555,390 340,390 340,400" class="w"/>
+
+  <!-- D2 clamp -->
+  <line x1="730" y1="170" x2="730" y2="172" class="w"/>
+  <circle cx="730" cy="170" r="3" class="dot"/>
+  <polygon points="719,198 741,198 730,174" fill="#111"/>
+  <line x1="715" y1="198" x2="745" y2="198" class="w"/>
+  <path d="M721 204 l8 -5 M731 204 l8 -5" stroke="#111" stroke-width="1.5" fill="none"/>
+  <text x="646" y="192" class="ref">D2 15V</text>
+  <line x1="730" y1="204" x2="730" y2="580" class="w"/>
+  <circle cx="730" cy="580" r="3" class="dot"/>
+
+  <!-- ================= U2 PC817 RX ================= -->
+  <rect x="300" y="400" width="130" height="120" rx="10" class="box"/>
+  <text x="306" y="392" class="ref">U2 PC817 (RX)</text>
+  <line x1="340" y1="400" x2="340" y2="428" class="w"/>
+  <polygon points="328,428 352,428 340,454" fill="#111"/>
+  <line x1="326" y1="454" x2="354" y2="454" class="w"/>
+  <path d="M318 434 l-14 -12 M330 448 l-14 -12" stroke="#111" stroke-width="1.5" fill="none"/>
+  <line x1="340" y1="454" x2="340" y2="470" class="w"/>
+  <line x1="340" y1="470" x2="360" y2="470" class="w"/>
+  <line x1="360" y1="470" x2="360" y2="520" class="w"/>
+  <circle cx="398" cy="462" r="22" class="w"/>
+  <line x1="414" y1="446" x2="430" y2="430" class="w"/>
+  <line x1="414" y1="478" x2="430" y2="495" class="w"/>
+  <text x="434" y="426" class="val">C</text>
+  <text x="434" y="508" class="val">E</text>
+  <line x1="430" y1="430" x2="760" y2="430" class="w"/>
+  <line x1="760" y1="430" x2="760" y2="250" class="w"/>
+  <circle cx="760" cy="250" r="3" class="dot"/>
+  <line x1="360" y1="520" x2="360" y2="580" class="w"/>
+  <circle cx="360" cy="580" r="3" class="dot"/>
+  <line x1="430" y1="495" x2="450" y2="495" class="w"/>
+  <line x1="450" y1="495" x2="450" y2="580" class="w"/>
+  <circle cx="450" cy="580" r="3" class="dot"/>
+
+  <!-- R3 pullup -->
+  <line x1="520" y1="100" x2="520" y2="150" class="r"/>
+  <circle cx="520" cy="100" r="3" class="dot"/>
+  <rect x="512" y="150" width="16" height="50" class="w"/>
+  <line x1="520" y1="200" x2="520" y2="250" class="w"/>
+  <circle cx="520" cy="250" r="3" class="dot"/>
+  <text x="530" y="168" class="ref">R3</text><text x="530" y="184" class="val">10k pullup</text>
+
+  <!-- ================= bridge + terminals ================= -->
+  <polygon points="950,120 1000,170 950,220 900,170" class="w"/>
+  <text x="862" y="96" class="ref">D1&#8211;D4 bridge (4&#215; 1N4148)</text>
+  <line x1="800" y1="170" x2="800" y2="170" class="r"/>
+  <text x="772" y="158" class="ref">R1</text><text x="776" y="204" class="val">100R</text>
+  <rect x="800" y="160" width="70" height="20" class="w"/>
+  <line x1="870" y1="170" x2="900" y2="170" class="r"/>
+  <text x="872" y="188" class="val">BR+</text>
+  <line x1="1000" y1="170" x2="1025" y2="170" class="w"/>
+  <line x1="1025" y1="170" x2="1025" y2="580" class="w"/>
+  <circle cx="1025" cy="580" r="3" class="dot"/>
+  <text x="1002" y="160" class="val">BR&#8722;</text>
+
+  <circle cx="950" cy="70" r="8" class="w"/>
+  <text x="966" y="74" class="lbl">OT-A</text>
+  <line x1="950" y1="78" x2="950" y2="120" class="w"/>
+  <text x="958" y="112" class="val">AC1</text>
+  <circle cx="950" cy="270" r="8" class="w"/>
+  <text x="966" y="276" class="lbl">OT-B</text>
+  <line x1="950" y1="262" x2="950" y2="220" class="w"/>
+  <text x="958" y="244" class="val">AC2</text>
+  <text x="920" y="52" class="ref">J2 boiler</text>
+
+  <!-- footer -->
+  <text x="30" y="618" class="val">Sense: TX high &#8658; U1 on &#8658; Q1 shunts &#8776;20 mA &#8658; bus low. Bus &#8805; ~13 V &#8658; U2 on &#8658; RX low. Unmarked crossings are not connected.</text>
+</svg>
