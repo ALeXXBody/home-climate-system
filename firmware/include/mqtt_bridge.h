@@ -4,6 +4,12 @@
 #include <PubSubClient.h>
 #include "ot_master.h"
 
+#if defined(ESP32) && defined(HCS_GW_ENABLE)
+namespace hcs {
+class OtGateway;
+}
+#endif
+
 class MqttBridge {
  public:
   MqttBridge(Client& net, OtMaster& ot);
@@ -21,6 +27,18 @@ class MqttBridge {
   /** Optional: set callback when OTA URL received via MQTT */
   void onOtaUrl(void (*cb)(const String& url)) { ota_cb_ = cb; }
 
+#if defined(ESP32) && defined(HCS_GW_ENABLE)
+  /** Gateway builds: expose live gateway + current mode string. */
+  void setGateway(hcs::OtGateway* gw, const char* mode) {
+    gw_ = gw;
+    gw_mode_ = mode;
+  }
+  /** Mode switch requested via MQTT (true=gateway). Persist + reboot in cb. */
+  void onGwMode(void (*cb)(bool gateway)) { gw_mode_cb_ = cb; }
+  /** Override setpoint (NAN releases). */
+  void onGwOverride(void (*cb)(float c)) { gw_override_cb_ = cb; }
+#endif
+
  private:
   PubSubClient mqtt_;
   OtMaster& ot_;
@@ -34,6 +52,13 @@ class MqttBridge {
   unsigned long last_telemetry_ms_ = 0;
   unsigned long last_discovery_ms_ = 0;
   void (*ota_cb_)(const String&) = nullptr;
+
+#if defined(ESP32) && defined(HCS_GW_ENABLE)
+  hcs::OtGateway* gw_ = nullptr;
+  const char* gw_mode_ = nullptr;
+  void (*gw_mode_cb_)(bool) = nullptr;
+  void (*gw_override_cb_)(float) = nullptr;
+#endif
 
   void reconnect();
   void subscribeAll();

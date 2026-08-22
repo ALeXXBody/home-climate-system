@@ -2,6 +2,9 @@
 #include "topics.h"
 #include "config.h"
 #include "hcs_commands.h"
+#if defined(ESP32) && defined(HCS_GW_ENABLE)
+#include "ot_gateway.h"
+#endif
 
 MqttBridge* MqttBridge::instance_ = nullptr;
 
@@ -78,6 +81,10 @@ void MqttBridge::subscribeAll() {
   mqtt_.subscribe(hcsSetTopic(node_id_, "weather_comp_cfg").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "ota_url").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "reboot").c_str());
+#if defined(ESP32) && defined(HCS_GW_ENABLE)
+  mqtt_.subscribe(hcsSetTopic(node_id_, "gw/set_mode").c_str());
+  mqtt_.subscribe(hcsSetTopic(node_id_, "gw/override_setpoint").c_str());
+#endif
 
   // OTGW-compat (node from settings)
   String base = String(OTGW_COMPAT_PREFIX) + "/set/" + otgw_node_ + "/";
@@ -134,6 +141,15 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
     case HCS_CMD_OTA_URL:
       if (ota_cb_ && payload.length()) ota_cb_(payload);
       break;
+#if defined(ESP32) && defined(HCS_GW_ENABLE)
+    case HCS_CMD_GW_MODE:
+      if (gw_mode_cb_) gw_mode_cb_(r.bool_value);
+      break;
+    case HCS_CMD_GW_OVERRIDE_SETPOINT:
+      if (gw_override_cb_)
+        gw_override_cb_(r.bool_value ? r.float_value : (float)NAN);
+      break;
+#endif
     default:
       break;
   }
@@ -161,6 +177,17 @@ void MqttBridge::publishDiscovery() {
   j += "\"ota_http\":\"http://" + ip_ + "/update\",";
   j += "\"api_status\":\"http://" + ip_ + "/api/status\",";
   j += "\"api_ota\":\"http://" + ip_ + "/api/ota\"";
+#if defined(ESP32) && defined(HCS_GW_ENABLE)
+  if (gw_) {
+    const hcs::GwCounters& c = gw_->counters();
+    j += ",\"gw\":{";
+    j += "\"requests\":" + String(c.requests) + ",";
+    j += "\"forwarded\":" + String(c.forwarded) + ",";
+    j += "\"answered_local\":" + String(c.answered_local) + ",";
+    j += "\"modified\":" + String(c.modified) + ",";
+    j += "\"errors\":" + String(c.errors) + "}";
+  }
+#endif
   j += "}";
 
   publish(String("hcs/discovery/") + node_id_, j, true);
@@ -192,6 +219,18 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
   publish(hcsTopic(node_id_, "weather_comp"), ot_.weatherComp() ? "on" : "off");
   if (!isnan(ot_.wcTarget()))
     publish(hcsTopic(node_id_, "wc_target"), f2(ot_.wcTarget()));
+
+#if defined(ESP32) && defined(HCS_GW_ENABLE)
+  if (gw_) {
+    publish(hcsTopic(node_id_, "gw/mode"),
+            gw_mode_ ? gw_mode_ : "master_only", true);
+    publish(hcsTopic(node_id_, "gw/tstat_online"),
+            gw_->thermostatOnline() ? "ON" : "OFF");
+    float ov = gw_->overrideSetpointC();
+    publish(hcsTopic(node_id_, "gw/override_setpoint"),
+            isnan(ov) ? "" : f2(ov), true);
+  }
+#endif
 
   // OTGW-compat
   if (s.valid) {

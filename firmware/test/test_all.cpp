@@ -1,4 +1,5 @@
 #include <math.h>
+#include <initializer_list>
 #include <unity.h>
 #include "hcs_commands.h"
 #include "hcs_gateway.h"
@@ -290,6 +291,39 @@ void test_gw_f88_roundtrip(void) {
   TEST_ASSERT_EQUAL_HEX16(0xFFFF, hcs::f88_encode(999.0f));                                 // clamp high
 }
 
+// ---------- gateway commands ----------
+void test_gw_set_mode_parse(void) {
+  HcsCommandResult gw = parse("hcs/n/set/gw/set_mode", "gateway");
+  TEST_ASSERT_EQUAL(HCS_CMD_GW_MODE, gw.cmd);
+  TEST_ASSERT_TRUE(gw.bool_value);
+
+  HcsCommandResult mo = parse("hcs/n/set/gw/set_mode", "master_only");
+  TEST_ASSERT_EQUAL(HCS_CMD_GW_MODE, mo.cmd);
+  TEST_ASSERT_FALSE(mo.bool_value);
+
+  HcsCommandResult junk = parse("hcs/n/set/gw/set_mode", "banana");
+  TEST_ASSERT_EQUAL(HCS_CMD_GW_MODE, junk.cmd);
+  TEST_ASSERT_FALSE(junk.bool_value);  // anything unknown -> master_only
+}
+
+void test_gw_override_parse(void) {
+  HcsCommandResult set = parse("hcs/n/set/gw/override_setpoint", "48.5");
+  TEST_ASSERT_EQUAL(HCS_CMD_GW_OVERRIDE_SETPOINT, set.cmd);
+  TEST_ASSERT_TRUE(set.bool_value);
+  TEST_ASSERT_FLOAT_WITHIN(0.01, 48.5, set.float_value);
+
+  for (const char* rel : {"off", "auto", "release"}) {
+    HcsCommandResult r = parse("hcs/n/set/gw/override_setpoint", rel);
+    TEST_ASSERT_EQUAL_MESSAGE(HCS_CMD_GW_OVERRIDE_SETPOINT, r.cmd, rel);
+    TEST_ASSERT_FALSE_MESSAGE(r.bool_value, rel);
+  }
+}
+
+void test_gw_topics_do_not_shadow_flow_setpoint(void) {
+  HcsCommandResult r = parse("hcs/n/set/flow_setpoint", "42");
+  TEST_ASSERT_EQUAL(HCS_CMD_FLOW_SETPOINT, r.cmd);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_ch_enable_on_variants);
@@ -325,5 +359,8 @@ int main(void) {
   RUN_TEST(test_gw_cache_skips_invalid_responses);
   RUN_TEST(test_gw_link_up_always_forwards_even_if_cached);
   RUN_TEST(test_gw_f88_roundtrip);
+  RUN_TEST(test_gw_set_mode_parse);
+  RUN_TEST(test_gw_override_parse);
+  RUN_TEST(test_gw_topics_do_not_shadow_flow_setpoint);
   return UNITY_END();
 }

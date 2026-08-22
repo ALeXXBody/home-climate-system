@@ -7,8 +7,8 @@ static Preferences prefs;
 #include <EEPROM.h>
 // Simple blob store on ESP8266
 static const int kEepromSize = 1024;
-// v2: + weather-comp curve fields (v1 blobs fail magic and re-provision)
-static const uint32_t kMagic = 0x48435332;  // HCS2
+// v3: + gateway mode flag
+static const uint32_t kMagic = 0x48435333;  // HCS3
 struct EepromBlob {
   uint32_t magic;
   uint16_t mqtt_port;
@@ -27,6 +27,7 @@ struct EepromBlob {
   float wc_t_out_design;
   float wc_flow_max;
   float wc_flow_min;
+  uint8_t gw_mode;
 };
 #endif
 
@@ -57,6 +58,7 @@ bool SettingsStore::load(HcsSettings& out) {
   out.wc_t_out_design = prefs.getFloat("wc_dsn", -10.0f);
   out.wc_flow_max = prefs.getFloat("wc_fmax", 65.0f);
   out.wc_flow_min = prefs.getFloat("wc_fmin", 25.0f);
+  out.gw_mode = prefs.getBool("gw_mode", false);
   return out.wifi_ssid.length() > 0;
 #elif defined(ESP8266)
   EepromBlob b{};
@@ -79,6 +81,7 @@ bool SettingsStore::load(HcsSettings& out) {
   out.wc_t_out_design = b.wc_t_out_design;
   out.wc_flow_max = b.wc_flow_max;
   out.wc_flow_min = b.wc_flow_min;
+  out.gw_mode = b.gw_mode == 1;  // garbage/0xFF -> master_only
   out.configured = true;
   return out.wifi_ssid.length() > 0;
 #endif
@@ -117,6 +120,7 @@ bool SettingsStore::save(const HcsSettings& in) {
   b.wc_t_out_design = in.wc_t_out_design;
   b.wc_flow_max = in.wc_flow_max;
   b.wc_flow_min = in.wc_flow_min;
+  b.gw_mode = in.gw_mode ? 1 : 0;
   EEPROM.put(0, b);
   return EEPROM.commit();
 #endif

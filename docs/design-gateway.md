@@ -9,11 +9,13 @@ work; see [`license-otgw.md`](license-otgw.md) for why no GPL sources are used.
 > - `include/hcs_gateway.h` — portable router core, 9 native tests (FORWARD /
 >   local-answer / setpoint override / f8.8 helpers)
 > - `ot_slave.*` + `ot_gateway.h/.cpp` — slave endpoint + glue, compiled only
->   under `HCS_GW_ENABLE` on ESP32 envs (`lolin_s2_mini_gw`, `esp32_d1_mini_gw`)
-> - `/api/status` exposes a `gw:{requests,forwarded,answered_local,modified,errors}`
->   block when the gateway build is active
-> - Still open: bench loopback (needs hardware), MQTT gw topics, web UI tab,
->   mode persistence
+>   under `HCS_GW_ENABLE` on ESP32 envs (`lolin_s2_mini_gw`, `esp32_d1_mini_gw`,
+>   `lolin_c3_mini_gw`)
+> - Mode persisted in settings; boot applies saved mode (deviation from the
+>   "master_only after 10 s" idea below — simpler, mode switch always reboots)
+> - MQTT: `gw/mode`, `gw/set_mode`, `gw/tstat_online`, `gw/override_setpoint`
+> - Web UI: Gateway tab (mode switch + reboot, live counters, override)
+> - Still open: bench loopback (needs hardware)
 
 ## 1. Problem
 

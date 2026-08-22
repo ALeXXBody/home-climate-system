@@ -18,6 +18,8 @@
  *   .../weather_comp_cfg  "<ref>,<design>,<fmax>,<fmin>" (see hcs_weather_comp.h)
  *   .../reboot         payload ignored
  *   .../ota_url        payload ignored here (URL passed through)
+ *   .../gw/set_mode    "gateway" | "master_only" (gateway builds only)
+ *   .../gw/override_setpoint  float °C | off/auto/release (gateway builds only)
  */
 
 #include <string.h>
@@ -33,6 +35,8 @@ enum HcsCommand {
   HCS_CMD_WEATHER_COMP_CFG,
   HCS_CMD_REBOOT,
   HCS_CMD_OTA_URL,
+  HCS_CMD_GW_MODE,
+  HCS_CMD_GW_OVERRIDE_SETPOINT,
 };
 
 struct HcsCommandResult {
@@ -110,6 +114,19 @@ inline HcsCommandResult hcs_parse_command(const char* topic, const char* payload
   }
   if (hcs_ends_with(topic, "/ota_url")) {
     r.cmd = HCS_CMD_OTA_URL;
+    return r;
+  }
+  if (hcs_ends_with(topic, "/gw/set_mode")) {
+    r.cmd = HCS_CMD_GW_MODE;
+    r.bool_value = hcs_ieq(payload, "gateway");
+    return r;
+  }
+  if (hcs_ends_with(topic, "/gw/override_setpoint")) {
+    r.cmd = HCS_CMD_GW_OVERRIDE_SETPOINT;
+    r.bool_value =
+        !(hcs_ieq(payload, "off") || hcs_ieq(payload, "auto") ||
+          hcs_ieq(payload, "release") || strcmp(payload, "") == 0);
+    r.float_value = (float)atof(payload);
     return r;
   }
   return r;

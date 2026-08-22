@@ -161,6 +161,7 @@ a{color:#03a9f4;text-decoration:none}
 <nav>
 <button data-t=status class=act>Status</button>
 <button data-t=controls>Controls</button>
+<button data-t=gateway>Gateway</button>
 <button data-t=settings>Settings</button>
 <button data-t=system>System</button>
 </nav>
@@ -204,6 +205,30 @@ a{color:#03a9f4;text-decoration:none}
 <span style=flex:1><label>Flow min</label><input id=wc_fmin type=number step=1 min=10 max=80></span></div>
 <button class=a onclick="applyWc()">Apply curve</button>
 </div></section>
+<section id=t-gateway>
+<div id=gw_na class=card style="display:none;color:#999">Gateway not active on this device
+(requires an ESP32 <code>*_gw</code> firmware build and gateway mode enabled).</div>
+<div id=gw_ui style=display:none>
+<div class=card><table>
+<tr><td>Mode</td><td><b id=g_mode></b></td></tr>
+<tr><td>Thermostat bus</td><td id=g_tstat>&mdash;</td></tr>
+<tr><td>Override setpoint</td><td id=g_ov>&mdash;</td></tr>
+<tr><td>Frames forwarded</td><td id=g_fwd></td></tr>
+<tr><td>Answered locally</td><td id=g_loc></td></tr>
+<tr><td>Modified</td><td id=g_mod></td></tr>
+<tr><td>Errors</td><td id=g_err></td></tr>
+</table></div>
+<div class=card style=margin-top:10px>
+<label>Mode switch (saves &amp; reboots)</label>
+<button class=a onclick="setGwMode('gateway')">Enter gateway</button>
+<button class=g onclick="setGwMode('master_only')">Back to master-only</button>
+<label>Force CH flow setpoint sent to boiler (&deg;C)</label>
+<div class=row><input type=number id=g_ov_in min=20 max=90 step=0.5 placeholder=(thermostat value passes through)>
+<button class=a onclick="applyGwOv()">Override</button>
+<button class=g onclick="releaseGwOv()">Release</button></div>
+</div>
+</div>
+</section>
 <section id=t-settings>
 <div class=card>
 <label>Device name</label><input id=s_name maxlength=31>
@@ -266,11 +291,24 @@ function paint(s){
  wclbl.textContent=s.wc_enable?' ON':' OFF';wct.textContent=s.wc_target??'—';
  if(!['wc_ref','wc_design','wc_fmax','wc_fmin'].includes(document.activeElement?.id)){
   wc_ref.value=s.wc_ref;wc_design.value=s.wc_design;wc_fmax.value=s.wc_fmax;wc_fmin.value=s.wc_fmin;}
+ const g=s.gw;
+ $('gw_ui').style.display=g?'block':'none';
+ $('gw_na').style.display=g?'none':'block';
+ if(g){
+  g_mode.textContent=g.mode;g_tstat.textContent=g.tstat_online?'ONLINE':'silent';
+  g_ov.textContent=g.override_setpoint!=null?g.override_setpoint+' °C':'pass-through';
+  g_fwd.textContent=g.forwarded;g_loc.textContent=g.answered_local;
+  g_mod.textContent=g.modified;g_err.textContent=g.errors;}
 }
 function applyWc(){ctl({wc_ref:+wc_ref.value,wc_design:+wc_design.value,
  wc_fmax:+wc_fmax.value,wc_fmin:+wc_fmin.value})}
 async function refresh(){try{paint(await jget('/api/status'))}catch(e){$('otb').textContent='API err'}}
 function ctl(b){jpost('/api/control',b).then(refresh)}
+function setGwMode(m){if(!confirm('Switch gateway mode to '+m+'?\nDevice will save and reboot.'))return;
+ jpost('/api/gw/mode',{mode:m}).then(()=>{const x=$('msg')||document.body;
+  alert('Saved. Rebooting…');setTimeout(()=>location.reload(),4000)})}
+function applyGwOv(){jpost('/api/gw/override',{setpoint:+g_ov_in.value}).then(refresh)}
+function releaseGwOv(){jpost('/api/gw/override',{release:true}).then(refresh)}
 function show(t){
  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('act',b.dataset.t===t));
  document.querySelectorAll('section').forEach(s=>s.classList.toggle('act',s.id==='t-'+t));
@@ -339,6 +377,11 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     if (gw_) {
       const hcs::GwCounters& c = gw_->counters();
       j += ",\"gw\":{";
+      j += "\"mode\":\"gateway\",";
+      j += "\"tstat_online\":" +
+           String(gw_->thermostatOnline() ? "true" : "false") + ",";
+      float ov = gw_->overrideSetpointC();
+      if (!isnan(ov)) j += "\"override_setpoint\":" + String(ov, 1) + ",";
       j += "\"requests\":" + String(c.requests) + ",";
       j += "\"forwarded\":" + String(c.forwarded) + ",";
       j += "\"answered_local\":" + String(c.answered_local) + ",";
@@ -470,6 +513,48 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     server.send(200, "application/json", "{\"ok\":true}");
     scheduleReboot();
   });
+
+#if defined(ESP32) && defined(HCS_GW_ENABLE)
+  server.on("/api/gw/mode", HTTP_POST, [this]() {
+    JsonDocument d;
+    DeserializationError e = deserializeJson(d, server.arg("plain"));
+    const char* m = e ? "" : (const char*)(d["mode"] | "");
+    if (!strlen(m) || (strcmp(m, "gateway") && strcmp(m, "master_only"))) {
+      server.send(400, "application/json",
+                  "{\"ok\":false,\"error\":\"mode must be gateway|master_only\"}");
+      return;
+    }
+    settings_.gw_mode = strcmp(m, "gateway") == 0;
+    SettingsStore store;
+    store.begin();
+    store.save(settings_);
+    server.send(200, "application/json",
+                "{\"ok\":true,\"message\":\"saved, rebooting\"}");
+    scheduleReboot(800);
+  });
+
+  server.on("/api/gw/override", HTTP_POST, [this]() {
+    if (!gw_) {
+      server.send(409, "application/json",
+                  "{\"ok\":false,\"error\":\"gateway not active\"}");
+      return;
+    }
+    JsonDocument d;
+    DeserializationError e = deserializeJson(d, server.arg("plain"));
+    if (e) {
+      server.send(400, "application/json",
+                  "{\"ok\":false,\"error\":\"bad json\"}");
+      return;
+    }
+    if (!d["release"].isNull() && d["release"].as<bool>()) {
+      gw_->setOverrideSetpointC((float)NAN);
+    } else if (!d["setpoint"].isNull()) {
+      gw_->setOverrideSetpointC(
+          constrain(d["setpoint"].as<float>(), 20.0f, 90.0f));
+    }
+    server.send(200, "application/json", "{\"ok\":true}");
+  });
+#endif
 
   ElegantOTA.begin(&server);
   if (settings.ota_password.length()) {

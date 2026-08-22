@@ -83,6 +83,18 @@ static void syncWcFromDevice() {
   store.save(settings);
 }
 
+#ifdef HCS_GW_ENABLE
+static void requestGwMode(bool enable) {
+  settings.gw_mode = enable;
+  SettingsStore st;
+  st.begin();
+  st.save(settings);
+  Serial.printf("[gw] mode -> %s, rebooting\n", enable ? "gateway" : "master_only");
+  delay(200);
+  ESP.restart();
+}
+#endif
+
 void setup() {
   Serial.begin(115200);
   delay(300);
@@ -160,11 +172,19 @@ void setup() {
   }
 
 #ifdef HCS_GW_ENABLE
-  ot.setAutopoll(false);  // master bus is driven by gateway forwarding now
-  gw.begin();
-  net.setGateway(&gw);
-  Serial.printf("[gw] gateway up — thermostat bus %d/%d\n", OT2_IN_PIN,
-                OT2_OUT_PIN);
+  if (settings.gw_mode) {
+    ot.setAutopoll(false);  // master bus is driven by gateway forwarding now
+    gw.begin();
+    net.setGateway(&gw);
+    Serial.printf("[gw] gateway mode — thermostat bus %d/%d\n", OT2_IN_PIN,
+                  OT2_OUT_PIN);
+  } else {
+    Serial.println(F("[gw] master_only mode (gateway compiled in)"));
+  }
+  mqtt.setGateway(settings.gw_mode ? &gw : nullptr,
+                  settings.gw_mode ? "gateway" : "master_only");
+  mqtt.onGwMode(requestGwMode);
+  mqtt.onGwOverride([](float c) { gw.setOverrideSetpointC(c); });
 #endif
 
   Serial.println(F("[boot] ready — open http://device-ip/ for status & OTA"));
@@ -196,9 +216,13 @@ void loop() {
 #endif
 
 #ifdef HCS_GW_ENABLE
-  gw.loop();     // answers thermostat + forwards to boiler on demand
+  if (settings.gw_mode) {
+    gw.loop();  // answers thermostat + forwards to boiler on demand
+  } else {
+    ot.poll();  // autonomous ~1 Hz master cycle
+  }
 #else
-  ot.poll();     // autonomous ~1 Hz master cycle (master-only builds)
+  ot.poll();  // autonomous ~1 Hz master cycle (master-only builds)
 #endif
 
 #ifdef HCS_TEST_BOOT

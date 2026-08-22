@@ -23,6 +23,9 @@ struct HcsSettings {
   float wc_t_out_design = -10.0f;
   float wc_flow_max = 65.0f;
   float wc_flow_min = 25.0f;
+
+  // Gateway mode (meaningful on ESP32 gateway builds only)
+  bool gw_mode = false;
 };
 
 class SettingsStore {

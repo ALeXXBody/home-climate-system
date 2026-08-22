@@ -72,6 +72,19 @@ follows a linear heating curve between `flow_min` at outdoor `ref` °C and
 (MsgID 27); without a valid reading the manual setpoint is used. WC state and
 curve config persist in NVS/EEPROM across reboots.
 
+## Gateway topics (ESP32 `*_gw` builds only)
+
+| Topic | Dir | Payload |
+|---|---|---|
+| `…/gw/mode` | pub | `master_only` \| `gateway` (retained) |
+| `…/gw/set_mode` | sub | same → saves + reboots |
+| `…/gw/tstat_online` | pub | `ON` / `OFF` (thermostat bus activity) |
+| `…/gw/override_setpoint` | pub | forced °C or empty = pass-through |
+| `…/gw/override_setpoint` | sub | float °C to force, `off`/`auto`/`release` to release |
+
+Discovery JSON includes a `gw` block with traffic counters on gateway builds.
+Web UI: Gateway tab (mode switch, live counters, setpoint override).
+
 ## OTGW-firmware compatibility
 
 So the existing Home Climate Control **OTGW MQTT** backend works unchanged:
