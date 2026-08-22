@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install PlatformIO
-        run: pip install platformio
+        run: pip install platformio intelhex ecdsa reedsolo
       - name: Run host-native unit tests
         working-directory: firmware
         run: pio test -e native
@@ -34,7 +34,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install PlatformIO
-        run: pip install platformio
+        run: pip install platformio intelhex ecdsa reedsolo
       - name: Cache PlatformIO packages
         uses: actions/cache@v4
         with:
