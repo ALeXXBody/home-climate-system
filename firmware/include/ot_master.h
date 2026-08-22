@@ -74,7 +74,4 @@ class OtMaster {
 #ifdef HCS_GW_ENABLE
   bool autopoll_ = true;
 #endif
-
-  static void handleInterrupt();
-  static OtMaster* instance_;
 };

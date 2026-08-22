@@ -1,19 +1,13 @@
 #include "ot_master.h"
 #include "config.h"
 
-OtMaster* OtMaster::instance_ = nullptr;
-
 OtMaster::OtMaster(int in_pin, int out_pin) : ot_(in_pin, out_pin) {}
 
-void OtMaster::handleInterrupt() {
-  if (instance_) {
-    instance_->ot_.process();
-  }
-}
-
+// NOTE: never register a custom ISR function pointer here. On ESP8266 a plain
+// function lives in flash and panics ("ISR not in IRAM!") on the first bus
+// edge; the library's no-arg begin() attaches its own IRAM-safe handler.
 void OtMaster::begin() {
-  instance_ = this;
-  ot_.begin(handleInterrupt);
+  ot_.begin();
 }
 
 void OtMaster::loop() {
