@@ -46,6 +46,14 @@ See [docs/license-otgw.md](docs/license-otgw.md).
 
 Scaffold only (v0.0.1). No flashable firmware yet.
 
+## Support
+
+If this project helps you, you can support development here:
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/alexxbody)
+
+https://buymeacoffee.com/alexxbody
+
 ## Related
 
 - Software: https://github.com/ALeXXBody/home-climate-control  
