@@ -74,6 +74,8 @@ void MqttBridge::subscribeAll() {
   mqtt_.subscribe(hcsSetTopic(node_id_, "flow_setpoint").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "max_modulation").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "dhw_enable").c_str());
+  mqtt_.subscribe(hcsSetTopic(node_id_, "weather_comp").c_str());
+  mqtt_.subscribe(hcsSetTopic(node_id_, "weather_comp_cfg").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "ota_url").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "reboot").c_str());
 
@@ -115,6 +117,15 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
       break;
     case HCS_CMD_MAX_MODULATION:
       ot_.setMaxModulation((int)r.int_value);
+      break;
+    case HCS_CMD_WEATHER_COMP:
+      ot_.setWeatherComp(r.bool_value);
+      break;
+    case HCS_CMD_WEATHER_COMP_CFG:
+      if (!ot_.setWeatherCompCfg(payload.c_str())) {
+        publish(hcsTopic(node_id_, "wc_error"),
+                "bad weather_comp_cfg (want ref,design,fmax,fmin)");
+      }
       break;
     case HCS_CMD_REBOOT:
       delay(100);
@@ -178,6 +189,9 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
   publish(hcsTopic(node_id_, "cmd_ch"), ot_.chEnable() ? "on" : "off");
   publish(hcsTopic(node_id_, "cmd_flow_setpoint"), f2(ot_.flowSetpoint()));
   publish(hcsTopic(node_id_, "cmd_max_modulation"), String(ot_.maxModulation()));
+  publish(hcsTopic(node_id_, "weather_comp"), ot_.weatherComp() ? "on" : "off");
+  if (!isnan(ot_.wcTarget()))
+    publish(hcsTopic(node_id_, "wc_target"), f2(ot_.wcTarget()));
 
   // OTGW-compat
   if (s.valid) {

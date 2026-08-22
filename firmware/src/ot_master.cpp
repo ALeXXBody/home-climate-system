@@ -36,6 +36,13 @@ void OtMaster::setMaxModulation(int percent) {
   max_mod_ = percent;
 }
 
+bool OtMaster::setWeatherCompCfg(const char* csv) {
+  HcsWeatherComp tmp = wc_;
+  if (!hcs_weather_comp_parse_cfg(csv, tmp)) return false;
+  wc_ = tmp;
+  return true;
+}
+
 void OtMaster::poll() {
   unsigned long now = millis();
   if (now - last_poll_ms_ < OT_STATUS_INTERVAL_MS) {
@@ -57,8 +64,18 @@ void OtMaster::poll() {
   snap_.dhw_active = OpenTherm::isHotWaterActive(response);
   snap_.flame = OpenTherm::isFlameOn(response);
 
+  // Outdoor temperature first (MsgID 27) so weather comp can use it this cycle
+  unsigned long req = OpenTherm::buildRequest(
+      OpenThermMessageType::READ_DATA, OpenThermMessageID::Toutside, 0);
+  unsigned long resp = ot_.sendRequest(req);
+  if (ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS) {
+    snap_.outdoor_temp = OpenTherm::getFloat(resp);
+  }
+
+  // Effective flow target: weather-comp curve when active, else manual
+  wc_target_ = hcs_weather_comp_target(wc_, snap_.outdoor_temp);
   if (ch_enable_) {
-    ot_.setBoilerTemperature(flow_setpoint_);
+    ot_.setBoilerTemperature(!isnan(wc_target_) ? wc_target_ : flow_setpoint_);
   }
 
   float t = ot_.getBoilerTemperature();
@@ -72,14 +89,6 @@ void OtMaster::poll() {
 
   t = ot_.getDHWTemperature();
   if (!isnan(t)) snap_.dhw_temp = t;
-
-  // Outdoor temperature (MsgID 27) — not all boilers expose this
-  unsigned long req = OpenTherm::buildRequest(
-      OpenThermMessageType::READ_DATA, OpenThermMessageID::Toutside, 0);
-  unsigned long resp = ot_.sendRequest(req);
-  if (ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS) {
-    snap_.outdoor_temp = OpenTherm::getFloat(resp);
-  }
 
   // Max relative modulation setting (MsgID 14)
   unsigned int mm = OpenTherm::temperatureToData((float)max_mod_);

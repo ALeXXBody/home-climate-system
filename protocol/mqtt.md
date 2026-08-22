@@ -50,6 +50,8 @@ re-publishes discovery.
 | `…/cmd_ch` | last commanded CH |
 | `…/cmd_flow_setpoint` | last commanded flow °C |
 | `…/cmd_max_modulation` | last commanded MM |
+| `…/weather_comp` | `on` / `off` (weather compensation active) |
+| `…/wc_target` | effective curve target °C (when WC active + outdoor known) |
 
 ### Commands (broker → device)
 
@@ -59,8 +61,16 @@ re-publishes discovery.
 | `…/set/dhw_enable` | same |
 | `…/set/flow_setpoint` | float °C |
 | `…/set/max_modulation` | 0–100 (clamped) |
+| `…/set/weather_comp` | `on` / `off` |
+| `…/set/weather_comp_cfg` | `<ref>,<design>,<fmax>,<fmin>` e.g. `18,-10,65,25` |
 | `…/set/reboot` | any |
 | `…/set/ota_url` | `http(s)://…/firmware.bin` |
+
+**Weather compensation:** when enabled, the flow setpoint sent to the boiler
+follows a linear heating curve between `flow_min` at outdoor `ref` °C and
+`flow_max` at design outdoor `design` °C. Outdoor temp comes from the boiler
+(MsgID 27); without a valid reading the manual setpoint is used. Curve config
+is runtime-only for now (not persisted across reboot).
 
 ## OTGW-firmware compatibility
 

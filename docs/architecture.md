@@ -24,6 +24,7 @@ Master shield = device is the **thermostat** (not a man-in-the-middle gateway).
 | `net_services.*` | WiFiManager portal, device web UI, ElegantOTA, ArduinoOTA, HTTP update |
 | `settings_store.*` | NVS (ESP32) / EEPROM blob (ESP8266) for WiFi/MQTT/settings |
 | `hcs_commands.h` | Portable command parser (host-tested via `pio test -e native`) |
+| `hcs_weather_comp.h` | Heating-curve math + CSV config parser (host-tested) |
 | `config.h` | Pins, intervals, defaults, portal AP name |
 | `topics.h` | Topic string helpers |
 | `secrets.h` | Optional compile-time WiFi/MQTT seeds (local only) |

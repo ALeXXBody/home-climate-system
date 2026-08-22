@@ -14,6 +14,8 @@
  *   .../ctrlsetpt      alias (OTGW-compat)
  *   .../max_modulation int 0..100 (clamped)
  *   .../maxmodulation  alias (OTGW-compat)
+ *   .../weather_comp   ON|OFF|1|0|true|false
+ *   .../weather_comp_cfg  "<ref>,<design>,<fmax>,<fmin>" (see hcs_weather_comp.h)
  *   .../reboot         payload ignored
  *   .../ota_url        payload ignored here (URL passed through)
  */
@@ -27,6 +29,8 @@ enum HcsCommand {
   HCS_CMD_DHW_ENABLE,
   HCS_CMD_FLOW_SETPOINT,
   HCS_CMD_MAX_MODULATION,
+  HCS_CMD_WEATHER_COMP,
+  HCS_CMD_WEATHER_COMP_CFG,
   HCS_CMD_REBOOT,
   HCS_CMD_OTA_URL,
 };
@@ -89,6 +93,15 @@ inline HcsCommandResult hcs_parse_command(const char* topic, const char* payload
     r.int_value = atol(payload);
     if (r.int_value < 0) r.int_value = 0;
     if (r.int_value > 100) r.int_value = 100;
+    return r;
+  }
+  if (hcs_ends_with(topic, "/weather_comp")) {
+    r.cmd = HCS_CMD_WEATHER_COMP;
+    r.bool_value = hcs_truthy(payload);
+    return r;
+  }
+  if (hcs_ends_with(topic, "/weather_comp_cfg")) {
+    r.cmd = HCS_CMD_WEATHER_COMP_CFG;
     return r;
   }
   if (hcs_ends_with(topic, "/reboot")) {

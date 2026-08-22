@@ -27,10 +27,11 @@ PlatformIO project under `firmware/`:
 - Device web UI (status / controls / settings) + ElegantOTA + ArduinoOTA
 - WiFi + MQTT (PubSubClient); native **`hcs/`** + **OTGW-compat** for HA
 - CH enable, flow setpoint, max modulation, DHW, reboot, OTA URL
+- Weather compensation: linear heating curve from boiler outdoor sensor
 - CH **off at boot** (failsafe)
 - Targets: `d1_mini`, `lolin_s2_mini`, `esp32_d1_mini`, `esp32s3_zero`
 
-Not yet: HA sidebar OTA push end-to-end, slave/gateway mode, weather-comp curve on-device.
+Not yet: HA sidebar OTA push end-to-end, slave/gateway mode, WC config persistence.
 
 ## Quick start
 

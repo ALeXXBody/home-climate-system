@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <OpenTherm.h>
+#include "hcs_weather_comp.h"
 
 struct OtSnapshot {
   bool valid = false;
@@ -32,6 +33,14 @@ class OtMaster {
   void setFlowSetpoint(float celsius);
   void setMaxModulation(int percent);
 
+  /** Weather compensation: on/off + curve config CSV ("<ref>,<design>,<fmax>,<fmin>"). */
+  void setWeatherComp(bool on) { wc_.enable = on; }
+  bool setWeatherCompCfg(const char* csv);
+  bool weatherComp() const { return wc_.enable; }
+  const HcsWeatherComp& weatherCompCfg() const { return wc_; }
+  /** Last effective (weather-compensated) target °C, NAN when inactive/unknown. */
+  float wcTarget() const { return wc_target_; }
+
   bool chEnable() const { return ch_enable_; }
   bool dhwEnable() const { return dhw_enable_; }
   float flowSetpoint() const { return flow_setpoint_; }
@@ -48,6 +57,8 @@ class OtMaster {
   bool dhw_enable_ = true;
   float flow_setpoint_ = 45.0f;
   int max_mod_ = 100;
+  HcsWeatherComp wc_;
+  float wc_target_ = NAN;
   OtSnapshot snap_;
   unsigned long last_poll_ms_ = 0;
 
