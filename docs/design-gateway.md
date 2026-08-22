@@ -56,7 +56,7 @@ Two independent OpenTherm interfaces:
 | Interface | Role | Talks to | Hardware |
 |---|---|---|---|
 | **Master** | OpenTherm master | Boiler | Existing DIYLess Master shield (stacked) |
-| **Slave** | OpenTherm slave | Wall thermostat | Second front-end (OT-Direct rev B piggyback) |
+| **Slave** | OpenTherm slave | Wall thermostat | DIYLess Slave OT shield (OT-Direct Slave as DIY alternative) |
 
 Both buses are polarity-free 2-wire loops, 15–18 V idle, current-modulated.
 Each interface needs one RX (interrupt-capable) + one TX GPIO.
@@ -66,9 +66,9 @@ Each interface needs one RX (interrupt-capable) + one TX GPIO.
 ### Option A — recommended first rig
 
 - Boiler side: **DIYLess Master OpenTherm Shield** (already owned).
-- Thermostat side: **OT-Direct** front-end (see
-  [`hardware/ot-direct/`](../hardware/ot-direct/)) wired to the thermostat
-  pair instead of the boiler pair. Same ~€5 jellybean BOM.
+- Thermostat side: **DIYLess Slave OT shield** — jumper-wire its IN/OUT to the
+  env's `OT2_*` pins. (A home-made OT-Direct Slave remains an option; see
+  [`hardware/ot-direct/`](../hardware/ot-direct/) for the master-side reference.)
 
 ### Option B — fully DIY
 
@@ -170,8 +170,8 @@ badge, live counters, override controls (reusing WC card patterns).
 | Layer | How |
 |---|---|
 | Router core | Native unit tests (`pio test -e native`): policy lookup, modify-in-place, cache TTL, counter wrap |
-| Single-chip loopback (M1) | Two GPIO pairs wired through two OT-Direct boards on the bench; master endpoint talks, slave decodes — proves electrical + framing |
-| Bench gateway (M3) | Real thermostat ↔ HCS ↔ boiler (or boiler sim: 18 V supply + OT-Direct + second ESP acting as boiler) |
+| Single-chip loopback (M1) | Two GPIO pairs wired through Master + Slave shields on the bench; master endpoint talks, slave decodes — proves electrical + framing |
+| Bench gateway (M3) | Real thermostat ↔ HCS ↔ boiler (or boiler sim: 18 V supply + Slave/Master shield + second ESP acting as boiler) |
 | Regression | CI builds all envs; master-only envs must produce byte-identical behaviour (router compiled out without `HCS_GW_ENABLE`) |
 
 ## 7. Milestones

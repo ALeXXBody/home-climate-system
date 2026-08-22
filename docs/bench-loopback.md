@@ -11,13 +11,13 @@ match [design-gateway.md](design-gateway.md) M1/M2: **frames decoded ≥99 %**,
 |---|---|
 | Any ESP32 board + matching `*_gw` env | see table below |
 | DIYLess Master OT shield | stacked (master/boiler side) |
-| Thermostat-side OT front-end | opto/transistor circuit per design-gateway.md §"front-ends"; or a DIYLess **Slave** shield |
+| DIYLess Slave OT shield | thermostat side — IN/OUT to the env's `OT2_*` pins |
 | Real room thermostat + boiler | wired on the thermostat bus segment |
 | MQTT broker reachable from the bench | placeholders `<broker>`, node id `hcs-<mac>` below |
 
 Pins per env:
 
-| Env | Master OT (stacked) | Thermostat tap (piggyback) |
+| Env | Master OT (stacked) | Thermostat tap (Slave OT shield → `OT2_*`) |
 |---|---|---|
 | `lolin_s2_mini_gw` | GPIO4/5 | GPIO16/17 |
 | `esp32_d1_mini_gw` | GPIO21/22 | GPIO26/27 |
@@ -26,8 +26,9 @@ Pins per env:
 Bus topology:
 
 ```
-boiler ──OT bus── DIYLess Master shield (stacked) ── MCU ── tstat front-end ──OT bus── room thermostat
-                  (GPIOx_in ← boiler data)              (GPIOy_out → thermostat data)
+boiler ──OT bus── DIYLess Master (stacked) ── MCU ── DIYLess Slave ──OT bus── room thermostat
+                  (GPIOx_in ← boiler data)          (GPIOy_in ← tstat data,
+                                                     GPIOy_out → tstat data)
 ```
 
 ## 1. Flash + first boot

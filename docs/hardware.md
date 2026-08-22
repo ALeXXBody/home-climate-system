@@ -76,8 +76,9 @@ positions; 5V position is VBUS.
 Note: GPIO7 also feeds the onboard WS2812 RGB LED — it will flicker with
 OpenTherm traffic. Harmless; treat it as a free activity indicator.
 
-Gateway build (`lolin_c3_mini_gw`) adds the thermostat-side front-end on
-free **GPIO4** (in) / **GPIO5** (out) — see docs/design-gateway.md.
+Gateway build (`lolin_c3_mini_gw`) adds the thermostat-side interface on
+free **GPIO4** (in) / **GPIO5** (out) — wire these to a DIYLess **Slave OT**
+shield's IN/OUT (see docs/design-gateway.md).
 
 Firmware env: `lolin_c3_mini` (`OT_IN=7`, `OT_OUT=6`).
 
