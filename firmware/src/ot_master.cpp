@@ -136,7 +136,7 @@ void OtMaster::referencePoll() {
     snap_.valid_oem = true;
   }
 
-  slowRead_();
+  if ((++poll_div_ % 3) == 0) slowRead_();
   applyInject_();
 }
 
@@ -183,7 +183,14 @@ void OtMaster::slowRead_() {
     case 13:  // FHBsize u8 in low byte
       snap_.fhb_size = d & 0xFF;
       snap_.valid_fhb = true;
-      fetchFhb_();
+      // Audit F6: indexed reads used to run every rotation (~7 s) — bus spam.
+      // Now: once per boot, then hourly.
+      if (!fhb_fetched_once_ ||
+          millis() - fhb_last_fetch_ms_ > 3600000UL) {
+        fetchFhb_();
+        fhb_last_fetch_ms_ = millis();
+        fhb_fetched_once_ = true;
+      }
       break;
     default:
       break;
@@ -311,14 +318,17 @@ void OtMaster::doPoll_() {
   ot_.sendRequest(req);
   (void)mm;
 
-  // DHW setpoint as remote parameter (ID 56) when user commanded one
-  if (!isnan(dhw_setpoint_) && snap_.valid_dhw_bounds) {
+  // DHW setpoint as remote parameter (ID 56). Audit F8: was written every
+  // 1 Hz cycle; thermostats reaffirm ~once a minute — match that.
+  if (!isnan(dhw_setpoint_) && snap_.valid_dhw_bounds &&
+      millis() - last_dhw_write_ms_ >= 60000UL) {
     float c = hcs::ot_clamp_with_bounds(dhw_setpoint_, true, snap_.dhw_lb,
                                         snap_.dhw_ub, 35, 60);
     unsigned long dhw_req = OpenTherm::buildRequest(
         OpenThermMessageType::WRITE_DATA, OpenThermMessageID::TdhwSet,
         (unsigned int)(c * 256));
     ot_.sendRequest(dhw_req);
+    last_dhw_write_ms_ = millis();
   }
 
   slowRead_();

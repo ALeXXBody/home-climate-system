@@ -132,6 +132,10 @@ class OtMaster {
   float dhw_setpoint_ = NAN;   // NAN = thermostat controls DHW
   bool failsafe_ = false;
   uint32_t slow_cycle_ = 0;
+  uint8_t poll_div_ = 0;            // slow-read throttle (every 3rd poll)
+  unsigned long last_dhw_write_ms_ = 0;
+  unsigned long fhb_last_fetch_ms_ = 0;
+  bool fhb_fetched_once_ = false;
 
   void applyInject_() {
     if (inj_outdoor_ && inj_outdoor_->valid)

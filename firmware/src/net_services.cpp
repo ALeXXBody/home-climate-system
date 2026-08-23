@@ -566,7 +566,16 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   });
 
 
-  server.on("/api/control", HTTP_POST, [this]() {
+  // All mutating endpoints require the admin/OTA password when one is set.
+  auto authOk = [this]() -> bool {
+    if (settings_.ota_password.length() == 0) return true;
+    if (server.authenticate("admin", settings_.ota_password.c_str())) return true;
+    server.requestAuthentication();
+    return false;
+  };
+
+  server.on("/api/control", HTTP_POST, [this, authOk]() {
+    if (!authOk()) return;
     JsonDocument d;
     DeserializationError e = deserializeJson(d, server.arg("plain"));
     if (e) {
@@ -612,7 +621,8 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     server.send(200, "application/json", j);
   });
 
-  server.on("/api/settings", HTTP_POST, [this]() {
+  server.on("/api/settings", HTTP_POST, [this, authOk]() {
+    if (!authOk()) return;
     JsonDocument d;
     DeserializationError e = deserializeJson(d, server.arg("plain"));
     if (e) {
@@ -649,7 +659,7 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
 
   server.on("/api/ota", HTTP_POST, [this]() {
     if (settings_.ota_password.length()) {
-      if (!server.authenticate("ota", settings_.ota_password.c_str())) {
+      if (!server.authenticate("admin", settings_.ota_password.c_str())) {
         return server.requestAuthentication();
       }
     }
@@ -683,7 +693,8 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
 
   // ---- 1-Wire sensors -------------------------------------------------
   // Failsafe configuration (web UI path; MQTT path lands via onFailsafeCfg)
-  server.on("/api/failsafe", HTTP_POST, [this]() {
+  server.on("/api/failsafe", HTTP_POST, [this, authOk]() {
+    if (!authOk()) return;
     JsonDocument d;
     DeserializationError e = deserializeJson(d, server.arg("plain"));
     if (e) {
@@ -762,7 +773,8 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     server.send(200, "application/json", j);
   });
 
-  server.on("/api/sensors/config", HTTP_POST, [this]() {    JsonDocument d;
+  server.on("/api/sensors/config", HTTP_POST, [this, authOk]() {
+    if (!authOk()) return;    JsonDocument d;
     DeserializationError e = deserializeJson(d, server.arg("plain"));
     if (e || d["enabled"].is<bool>() == false) {
       server.send(400, "application/json",
@@ -781,7 +793,8 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     server.send(200, "application/json", "{\"ok\":true}");
   });
 
-  server.on("/api/sensors/assign", HTTP_POST, [this]() {
+  server.on("/api/sensors/assign", HTTP_POST, [this, authOk]() {
+    if (!authOk()) return;
     JsonDocument d;
     DeserializationError e = deserializeJson(d, server.arg("plain"));
     const char* addr = e ? "" : (const char*)(d["addr"] | "");
@@ -821,7 +834,8 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   });
 
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
-  server.on("/api/gw/mode", HTTP_POST, [this]() {
+  server.on("/api/gw/mode", HTTP_POST, [this, authOk]() {
+    if (!authOk()) return;
     JsonDocument d;
     DeserializationError e = deserializeJson(d, server.arg("plain"));
     const char* m = e ? "" : (const char*)(d["mode"] | "");
@@ -843,7 +857,8 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     scheduleReboot(800);
   });
 
-  server.on("/api/gw/override", HTTP_POST, [this]() {
+  server.on("/api/gw/override", HTTP_POST, [this, authOk]() {
+    if (!authOk()) return;
     if (!gw_) {
       server.send(409, "application/json",
                   "{\"ok\":false,\"error\":\"gateway not active\"}");

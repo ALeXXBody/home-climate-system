@@ -43,6 +43,9 @@ void MqttBridge::begin(const char* host, uint16_t port, const char* user,
   mqtt_.setServer(host_.c_str(), port_);
   mqtt_.setCallback(thunk);
   mqtt_.setBufferSize(1024);
+  // Audit F7: default 15 s socket timeout stalled the whole loop during
+  // every reconnect attempt against an unreachable broker.
+  mqtt_.setSocketTimeout(4);
   Serial.printf("[mqtt] broker %s:%u user='%s'\n", host_.c_str(), port_,
                 user_.length() ? user_.c_str() : "(anonymous)");
 }
@@ -74,8 +77,9 @@ void MqttBridge::loop() {
 }
 
 void MqttBridge::reconnect() {
+  static unsigned long delay_ms = MQTT_RECONNECT_MS;
   unsigned long now = millis();
-  if (now - last_reconnect_ms_ < MQTT_RECONNECT_MS) return;
+  if (now - last_reconnect_ms_ < delay_ms) return;
   last_reconnect_ms_ = now;
 
   String clientId = String("hcs-") + node_id_;
@@ -91,11 +95,13 @@ void MqttBridge::reconnect() {
     // PubSubClient state codes: -4 timeout, -3 lost, -2 failed(TCP/DNS),
     // -1 disconnected, 5 bad user/pass — log EVERY failure so a dead
     // broker link is never silent again.
-    Serial.printf("[mqtt] connect to %s:%u failed (state=%d)\n",
-                  host_.c_str(), port_, mqtt_.state());
+    Serial.printf("[mqtt] connect to %s:%u failed (state=%d, retry in %lus)\n",
+                  host_.c_str(), port_, mqtt_.state(),
+                  (delay_ms = min(2 * delay_ms, 60000UL)) / 1000);
     return;
   }
   Serial.println("[mqtt] connected");
+  delay_ms = MQTT_RECONNECT_MS;
   publish(lwt, "online", true);
   subscribeAll();
   publishDiscovery();
