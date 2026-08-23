@@ -40,6 +40,18 @@ bool NetServices::beginWifi(HcsSettings& settings) {
   settings_ = settings;
   WiFi.mode(WIFI_STA);
 
+  // Unique identity: two devices with the same name/hostname confuse DHCP
+  // displays and mDNS (audit follow-up). Suffix = last 4 MAC hex chars.
+  String mac = WiFi.macAddress();
+  mac.replace(":", "");
+  String suffix = mac.substring(mac.length() - 4);
+  suffix.toUpperCase();
+#if defined(ESP32)
+  WiFi.setHostname(("hcs-" + suffix).c_str());
+#else
+  WiFi.hostname("hcs-" + suffix);
+#endif
+
   WiFiManager wm;
   wm.setConfigPortalTimeout(CONFIG_PORTAL_TIMEOUT_S);
   wm.setConnectTimeout(WIFI_CONNECT_TIMEOUT_S);
@@ -77,12 +89,14 @@ bool NetServices::beginWifi(HcsSettings& settings) {
   if (settings.configured && settings.wifi_ssid.length()) {
     WiFi.begin(settings.wifi_ssid.c_str(), settings.wifi_pass.c_str());
   }
-  Serial.printf("[wifi] portal AP fallback: %s\n", PORTAL_AP_NAME);
-  bool ok = wm.autoConnect(PORTAL_AP_NAME, PORTAL_AP_PASS);
+  // Per-device AP name so simultaneous portals never collide
+  ap_name_ = String(PORTAL_AP_NAME) + "-" + suffix;
+  Serial.printf("[wifi] portal AP fallback: %s\n", ap_name_.c_str());
+  bool ok = wm.autoConnect(ap_name_.c_str(), PORTAL_AP_PASS);
 
   if (!ok) {
     Serial.println(F("[wifi] failed / portal timeout — retrying portal"));
-    ok = wm.startConfigPortal(PORTAL_AP_NAME, PORTAL_AP_PASS);
+    ok = wm.startConfigPortal(ap_name_.c_str(), PORTAL_AP_PASS);
   }
 
   if (!ok) {

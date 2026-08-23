@@ -59,6 +59,7 @@ class NetServices {
   hcs::HcsSensors* sensors_ = nullptr;
   HcsSettings* shared_ = nullptr;
   hcs::FsState* fs_state_ptr_ = nullptr;
+  String ap_name_;
 
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   hcs::OtGateway* gw_ = nullptr;
