@@ -284,6 +284,9 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
       ident += "; FHB size " + String(s.fhb_size);
     if (ident != last_ident) {
       publish(hcsTopic(node_id_, "boiler_identity"), ident, true);
+      if (s.valid_slave_cfg)
+        publish(hcsTopic(node_id_, "boiler_member"),
+                String(s.slave_member_id), true);
       last_ident = ident;
     }
     if (String(fhb) != last_fhb) {
