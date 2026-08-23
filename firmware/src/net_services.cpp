@@ -441,55 +441,53 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   });
 
   server.on("/api/status", HTTP_GET, [this]() {
-    OtSnapshot s = ot_.snap();
-    String j = "{";
-    j += "\"node_id\":\"" + node_id_ + "\",";
-    j += "\"board\":\"" + String(HCS_BOARD_NAME) + "\",";
-    j += "\"version\":\"" + String(HCS_FW_VERSION) + "\",";
-    j += "\"ip\":\"" + WiFi.localIP().toString() + "\",";
-    j += "\"name\":\"" + settings_.device_name + "\",";
-    j += "\"mqtt_host\":\"" + settings_.mqtt_host + "\",";
-    j += "\"mqtt_port\":" + String(settings_.mqtt_port) + ",";
-    j += "\"rssi\":" + String(WiFi.RSSI()) + ",";
-    j += "\"uptime\":" + String(millis() / 1000UL) + ",";
-    j += "\"ot_valid\":" + String(s.valid ? "true" : "false") + ",";
-    j += "\"ch_enable\":" + String(ot_.chEnable() ? "true" : "false") + ",";
-    j += "\"dhw_enable\":" + String(ot_.dhwEnable() ? "true" : "false") + ",";
-    j += "\"ch_active\":" + String(s.ch_active ? "true" : "false") + ",";
-    j += "\"fault\":" + String(s.fault ? "true" : "false") + ",";
-    j += "\"flame\":" + String(s.flame ? "true" : "false") + ",";
-    j += "\"flow_setpoint\":" + String(ot_.flowSetpoint(), 1) + ",";
-    j += "\"max_modulation\":" + String(ot_.maxModulation());
-    const HcsWeatherComp& wc = ot_.weatherCompCfg();
-    j += ",\"wc_enable\":" + String(ot_.weatherComp() ? "true" : "false");
-    j += ",\"wc_ref\":" + String(wc.t_out_ref, 1);
-    j += ",\"wc_design\":" + String(wc.t_out_design, 1);
-    j += ",\"wc_fmax\":" + String(wc.flow_max, 1);
-    j += ",\"wc_fmin\":" + String(wc.flow_min, 1);
-    if (!isnan(ot_.wcTarget())) j += ",\"wc_target\":" + String(ot_.wcTarget(), 1);
+    const OtSnapshot& s = ot_.snap();
+    JsonDocument doc;
+    doc["node_id"] = node_id_;
+    doc["board"] = HCS_BOARD_NAME;
+    doc["version"] = HCS_FW_VERSION;
+    doc["ip"] = WiFi.localIP().toString();
+    doc["name"] = settings_.device_name;
+    doc["mqtt_host"] = settings_.mqtt_host;
+    doc["mqtt_port"] = settings_.mqtt_port;
+    doc["rssi"] = WiFi.RSSI();
+    doc["uptime"] = millis() / 1000UL;
+    doc["ot_valid"] = s.valid;
+    doc["ch_enable"] = ot_.chEnable();
+    doc["dhw_enable"] = ot_.dhwEnable();
+    doc["ch_active"] = s.ch_active;
+    doc["fault"] = s.fault;
+    doc["flame"] = s.flame;
+    doc["flow_setpoint"] = ot_.flowSetpoint();
+    doc["max_modulation"] = ot_.maxModulation();
+
+    doc["wc_enable"] = ot_.weatherComp();
+    doc["wc_ref"] = ot_.weatherCompCfg().t_out_ref;
+    doc["wc_design"] = ot_.weatherCompCfg().t_out_design;
+    doc["wc_fmax"] = ot_.weatherCompCfg().flow_max;
+    doc["wc_fmin"] = ot_.weatherCompCfg().flow_min;
+
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
     if (gw_) {
       const hcs::GwCounters& c = gw_->counters();
-      j += ",\"gw\":{";
-      j += "\"mode\":\"gateway\",";
-      j += "\"cfg\":\"" + String(hcs_gw_cfg_name(settings_.gw_cfg)) + "\",";
-      j += "\"tstat_online\":" +
-           String(gw_->thermostatOnline() ? "true" : "false") + ",";
+      JsonObject g = doc["gw"].to<JsonObject>();
+      g["mode"] = "gateway";
+      g["cfg"] = hcs_gw_cfg_name(settings_.gw_cfg);
+      g["tstat_online"] = gw_->thermostatOnline();
       float ov = gw_->overrideSetpointC();
-      if (!isnan(ov)) j += "\"override_setpoint\":" + String(ov, 1) + ",";
-      j += "\"requests\":" + String(c.requests) + ",";
-      j += "\"forwarded\":" + String(c.forwarded) + ",";
-      j += "\"answered_local\":" + String(c.answered_local) + ",";
-      j += "\"modified\":" + String(c.modified) + ",";
-      j += "\"errors\":" + String(c.errors);
-      j += "}";
+      if (!isnan(ov)) g["override_setpoint"] = ov;
+      g["requests"] = c.requests;
+      g["forwarded"] = c.forwarded;
+      g["answered_local"] = c.answered_local;
+      g["modified"] = c.modified;
+      g["errors"] = c.errors;
     } else {
-      // gateway compiled in but not active (auto-probe / forced master-only)
-      j += ",\"gw\":{\"mode\":\"master_only\",\"cfg\":\"" +
-           String(hcs_gw_cfg_name(settings_.gw_cfg)) + "\"}";
+      JsonObject g = doc["gw"].to<JsonObject>();
+      g["mode"] = "master_only";
+      g["cfg"] = hcs_gw_cfg_name(settings_.gw_cfg);
     }
 #endif
-    // Boiler diagnostics (ASF flags + OEM code -> clean text)
+    // Boiler diagnostics
     {
       hcs::BoilerDiag bd;
       bd.valid_asf = s.valid_asf;
@@ -498,17 +496,15 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
       bd.oem = s.oem_diag;
       char txt[160];
       hcs::boiler_diag_text(bd, txt, sizeof(txt));
-      JsonDocument bdd;
+      JsonObject bdd = doc["boiler_diag"].to<JsonObject>();
       bdd["state"] = hcs::boiler_diag_state(bd);
       bdd["text"] = txt;
       if (bd.valid_asf) bdd["asf"] = bd.asf;
       if (bd.valid_oem) bdd["oem"] = bd.oem;
-      j += ",\"boiler_diag\":";
-      serializeJson(bdd, j);
     }
     // Boiler identity / capability summary
     {
-      JsonDocument bid;
+      JsonObject bid = doc["boiler"].to<JsonObject>();
       String ident = "";
       if (s.valid_slave_cfg)
         ident += "slave member " + String(s.slave_member_id) + " config 0x" +
@@ -527,45 +523,48 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
         hcs::ot_fhb_format(s.fhb_codes, s.fhb_count, fhb, sizeof(fhb));
         bid["fault_history"] = fhb;
       }
-      if (s.valid_dhw_bounds) {
-        String b = String((int)s.dhw_lb) + ".." + String((int)s.dhw_ub);
-        bid["dhw_bounds"] = b;
-      }
-      if (!bid.isNull()) j += ",\"boiler\":";
-      if (!bid.isNull()) serializeJson(bid, j);
-      if (s.valid_pressure)
-        j += ",\"pressure_bar\":" + String(s.pressure_bar, 2);
-      if (!isnan(ot_.dhwSetpoint()))
-        j += ",\"dhw_setpoint\":" + String(ot_.dhwSetpoint(), 1);
+      if (s.valid_dhw_bounds)
+        bid["dhw_bounds"] =
+            String((int)s.dhw_lb) + ".." + String((int)s.dhw_ub);
     }
+    // Temperatures present on the snapshot
+    auto putc = [&](const char* k, float v) {
+      if (!isnan(v)) doc[k] = roundf(v * 10) / 10.0f;
+    };
+    putc("flow_temp", s.flow_temp);
+    putc("return_temp", s.return_temp);
+    putc("outdoor_temp", s.outdoor_temp);
+    putc("modulation", s.modulation);
+    putc("pressure_bar", s.valid_pressure ? s.pressure_bar : NAN);
+    if (!isnan(ot_.dhwSetpoint())) doc["dhw_setpoint"] = ot_.dhwSetpoint();
+
     // Connection-loss failsafe
     {
       HcsSettings& cfg = shared_ ? *shared_ : settings_;
       hcs::FsState st =
           fs_state_ptr_ ? *fs_state_ptr_ : hcs::FsState::CONNECTED;
       const char* names[3] = {"connected", "hold", "failsafe"};
-      j += ",\"failsafe\":{\"state\":\"" + String(names[(int)st]) + "\"";
-      j += ",\"active\":" +
-           String(st == hcs::FsState::FAILSAFE ? "true" : "false");
-      j += ",\"enable\":" + String(cfg.fs_enable ? "true" : "false");
-      j += ",\"flow\":" + String(cfg.fs_flow_c, 1);
-      j += ",\"grace_min\":" + String(cfg.fs_grace_min);
-      j += "}";
+      JsonObject f = doc["failsafe"].to<JsonObject>();
+      f["state"] = names[(int)st];
+      f["active"] = (st == hcs::FsState::FAILSAFE);
+      f["enable"] = cfg.fs_enable;
+      f["flow"] = cfg.fs_flow_c;
+      f["grace_min"] = cfg.fs_grace_min;
     }
     // MQTT link visibility (host shown post-sanitisation)
     if (MqttBridge* mb = MqttBridge::active()) {
-      j += ",\"mqtt_link\":{\"connected\":" +
-           String(mb->connectedOrNever() ? "true" : "false");
-      j += ",\"host\":\"" + mb->host() + "\",\"port\":" + mb->port() + "}";
+      JsonObject m = doc["mqtt_link"].to<JsonObject>();
+      m["connected"] = mb->connectedOrNever();
+      m["host"] = mb->host();
+      m["port"] = mb->port();
     }
-    if (!isnan(s.flow_temp)) j += ",\"flow_temp\":" + String(s.flow_temp, 1);
-    if (!isnan(s.return_temp))
-      j += ",\"return_temp\":" + String(s.return_temp, 1);
-    if (!isnan(s.outdoor_temp)) j += ",\"outdoor_temp\":" + String(s.outdoor_temp, 1);
-    if (!isnan(s.modulation)) j += ",\"modulation\":" + String(s.modulation, 1);
-    j += "}";
+
+    String j;
+    j.reserve(measureJson(doc) + 16);
+    serializeJson(doc, j);
     server.send(200, "application/json", j);
   });
+
 
   server.on("/api/control", HTTP_POST, [this]() {
     JsonDocument d;
