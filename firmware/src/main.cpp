@@ -265,8 +265,10 @@ void setup() {
   Serial.println(F("[http] TEST_BOOT: skipping HTTP/MQTT services"));
   nodeId = makeNodeId();
   Serial.printf("[boot] node %s ready (test mode)\n", nodeId.c_str());
+#else
   // Unique default device name: "Home Climate System" alone made two
-  // devices indistinguishable in router lists and HCC.
+  // devices indistinguishable in router lists and HCC. (Runs on real
+  // hardware only — inside the #else branch.)
   {
     String mac = WiFi.macAddress();
     mac.replace(":", "");
