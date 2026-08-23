@@ -396,8 +396,83 @@ void test_ow_role_parse(void) {
   TEST_ASSERT_EQUAL_INT(hcs::OW_ROLE_RETURN, r);
   TEST_ASSERT_TRUE(hcs::ow_role_from_name("OUTDOOR", &r));
   TEST_ASSERT_EQUAL_INT(hcs::OW_ROLE_OUTDOOR, r);
+  TEST_ASSERT_TRUE(hcs::ow_role_from_name("custom", &r));
+  TEST_ASSERT_EQUAL_INT(hcs::OW_ROLE_CUSTOM, r);
+  TEST_ASSERT_TRUE(hcs::ow_role_from_name("x", &r));
+  TEST_ASSERT_EQUAL_INT(hcs::OW_ROLE_CUSTOM, r);
   TEST_ASSERT_FALSE(hcs::ow_role_from_name("banana", &r));
   TEST_ASSERT_FALSE(hcs::ow_role_from_name(nullptr, &r));
+}
+
+void test_ow_sanitize_name(void) {
+  char out[hcs::kOwNameMax + 1];
+  TEST_ASSERT_TRUE(hcs::ow_sanitize_name("Hall Temp", out, sizeof(out)));
+  TEST_ASSERT_EQUAL_STRING("hall_temp", out);
+  TEST_ASSERT_TRUE(hcs::ow_sanitize_name("A1", out, sizeof(out)));
+  TEST_ASSERT_EQUAL_STRING("a1", out);
+  TEST_ASSERT_FALSE(hcs::ow_sanitize_name("1bad", out, sizeof(out)));  // leading digit
+  TEST_ASSERT_FALSE(hcs::ow_sanitize_name("x", out, sizeof(out)));     // too short
+  TEST_ASSERT_FALSE(hcs::ow_sanitize_name("", out, sizeof(out)));
+  TEST_ASSERT_FALSE(hcs::ow_sanitize_name(nullptr, out, sizeof(out)));
+}
+
+void test_ow_classify_health(void) {
+  TEST_ASSERT_EQUAL_INT(hcs::OW_HEALTH_DISCONNECTED,
+                        hcs::ow_classify(-127.0f, false, 0));
+  TEST_ASSERT_EQUAL_INT(hcs::OW_HEALTH_IMPLAUSIBLE,
+                        hcs::ow_classify(130.0f, false, 0));
+  TEST_ASSERT_EQUAL_INT(hcs::OW_HEALTH_OK,
+                        hcs::ow_classify(21.5f, false, 0));
+  // stuck at power-on default
+  TEST_ASSERT_EQUAL_INT(hcs::OW_HEALTH_STUCK85,
+                        hcs::ow_classify(85.0f, true, 85.0f));
+  // first 85 is still OK (could be real hot water)
+  TEST_ASSERT_EQUAL_INT(hcs::OW_HEALTH_OK,
+                        hcs::ow_classify(85.0f, false, 0));
+  TEST_ASSERT_EQUAL_INT(hcs::OW_HEALTH_UNSTABLE,
+                        hcs::ow_classify(40.0f, true, 20.0f));
+}
+
+void test_ow_assign_roles_and_custom(void) {
+  hcs::OwSlot slots[hcs::kOwMaxSlots] = {};
+  const char* a1 = "28FF641E0B0000AB";
+  const char* a2 = "28FF641E0B0000CD";
+  TEST_ASSERT_TRUE(hcs::ow_assign(slots, hcs::kOwMaxSlots, a1,
+                                  hcs::OW_ROLE_OUTDOOR, nullptr));
+  TEST_ASSERT_EQUAL_STRING(a1, hcs::ow_addr_for_role(
+      slots, hcs::kOwMaxSlots, hcs::OW_ROLE_OUTDOOR));
+  // steal outdoor to a2
+  TEST_ASSERT_TRUE(hcs::ow_assign(slots, hcs::kOwMaxSlots, a2,
+                                  hcs::OW_ROLE_OUTDOOR, nullptr));
+  TEST_ASSERT_EQUAL_STRING(a2, hcs::ow_addr_for_role(
+      slots, hcs::kOwMaxSlots, hcs::OW_ROLE_OUTDOOR));
+  // custom needs name
+  TEST_ASSERT_FALSE(hcs::ow_assign(slots, hcs::kOwMaxSlots, a1,
+                                   hcs::OW_ROLE_CUSTOM, ""));
+  TEST_ASSERT_TRUE(hcs::ow_assign(slots, hcs::kOwMaxSlots, a1,
+                                  hcs::OW_ROLE_CUSTOM, "Hall Temp"));
+  int idx = hcs::ow_slot_find(slots, hcs::kOwMaxSlots, a1);
+  TEST_ASSERT_TRUE(idx >= 0);
+  TEST_ASSERT_EQUAL_INT(hcs::OW_ROLE_CUSTOM, slots[idx].role);
+  TEST_ASSERT_EQUAL_STRING("hall_temp", slots[idx].name);
+  // duplicate custom name rejected
+  TEST_ASSERT_FALSE(hcs::ow_assign(slots, hcs::kOwMaxSlots, a2,
+                                   hcs::OW_ROLE_CUSTOM, "hall_temp"));
+  // clear
+  TEST_ASSERT_TRUE(hcs::ow_assign(slots, hcs::kOwMaxSlots, a1,
+                                  hcs::OW_ROLE_NONE, nullptr));
+  TEST_ASSERT_EQUAL_INT(-1, hcs::ow_slot_find(slots, hcs::kOwMaxSlots, a1));
+}
+
+void test_ow_legacy_migration(void) {
+  hcs::OwSlot slots[hcs::kOwMaxSlots] = {};
+  uint8_t n = hcs::ow_slots_from_legacy(
+      "28FF641E0B0000AB", "28FF641E0B0000CD", slots, hcs::kOwMaxSlots);
+  TEST_ASSERT_EQUAL_UINT8(2, n);
+  TEST_ASSERT_EQUAL_STRING("28FF641E0B0000AB",
+      hcs::ow_addr_for_role(slots, hcs::kOwMaxSlots, hcs::OW_ROLE_OUTDOOR));
+  TEST_ASSERT_EQUAL_STRING("28FF641E0B0000CD",
+      hcs::ow_addr_for_role(slots, hcs::kOwMaxSlots, hcs::OW_ROLE_RETURN));
 }
 
 void test_sensor_override_rules(void) {
@@ -598,6 +673,10 @@ int main(void) {
   RUN_TEST(test_ow_addr_hex_roundtrip);
   RUN_TEST(test_ow_hex_rejects_bad_input);
   RUN_TEST(test_ow_role_parse);
+  RUN_TEST(test_ow_sanitize_name);
+  RUN_TEST(test_ow_classify_health);
+  RUN_TEST(test_ow_assign_roles_and_custom);
+  RUN_TEST(test_ow_legacy_migration);
   RUN_TEST(test_sensor_override_rules);
   RUN_TEST(test_sensor_freshness_window);
   RUN_TEST(test_boiler_diag_no_data_and_healthy);

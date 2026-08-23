@@ -5,6 +5,7 @@
 #include "hcs_gw_cfg.h"
 #include "hcs_failsafe.h"
 #include "hcs_weather_comp.h"
+#include "hcs_sensor_logic.h"
 
 // Re-export gateway-role names for unqualified use across firmware sources
 using hcs::HcsGwCfg;
@@ -39,10 +40,18 @@ struct HcsSettings {
   // Gateway role (meaningful on ESP32 gateway builds only; see HcsGwCfg)
   uint8_t gw_cfg = HCS_GW_AUTO;
 
-  // 1-Wire DS18B20 probes (see hcs_sensor_logic.h); addrs as 16 hex chars
+  // 1-Wire DS18B20 probes (see hcs_sensor_logic.h)
   bool ow_enable = false;
-  String ow_addr_outdoor = "";
-  String ow_addr_return = "";
+  hcs::OwSlot ow_slots[hcs::kOwMaxSlots];
+  uint8_t ow_slot_count = 0;  // highest used index+1 (sparse ok; empty addr = free)
+
+  /** Legacy accessors for outdoor/return channel addresses (empty if unassigned). */
+  const char* ow_addr_outdoor() const {
+    return hcs::ow_addr_for_role(ow_slots, hcs::kOwMaxSlots, hcs::OW_ROLE_OUTDOOR);
+  }
+  const char* ow_addr_return() const {
+    return hcs::ow_addr_for_role(ow_slots, hcs::kOwMaxSlots, hcs::OW_ROLE_RETURN);
+  }
 
   // Connection-loss failsafe (see hcs_failsafe.h)
   bool fs_enable = kFsEnableDefault;

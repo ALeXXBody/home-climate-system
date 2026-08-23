@@ -5,6 +5,10 @@
 #include "ot_master.h"
 #include "hcs_failsafe.h"
 
+namespace hcs {
+class HcsSensors;
+}
+
 /** True for template placeholders like "192.168.50.xxx" / "xxx.local". */
 inline bool hcs_host_is_placeholder(const String& h) {
   if (h.length() == 0) return false;
@@ -63,6 +67,8 @@ class MqttBridge {
   void onFailsafeCfg(void (*cb)(const String& json)) { fs_cfg_cb_ = cb; }
   /** Live failsafe state owned by main loop (for retained publishing). */
   void setFailsafeStatePtr(hcs::FsState* p) { fs_state_ptr_ = p; }
+  /** Optional 1-Wire probes for custom/outdoor/return MQTT publish. */
+  void setSensors(hcs::HcsSensors* s) { sensors_ = s; }
 
  private:
   PubSubClient mqtt_;
@@ -82,6 +88,7 @@ class MqttBridge {
   void (*ota_cb_)(const String&) = nullptr;
   void (*fs_cfg_cb_)(const String&) = nullptr;
   hcs::FsState* fs_state_ptr_ = nullptr;
+  hcs::HcsSensors* sensors_ = nullptr;
 
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   hcs::OtGateway* gw_ = nullptr;

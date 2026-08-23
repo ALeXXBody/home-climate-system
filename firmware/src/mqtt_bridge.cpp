@@ -3,6 +3,7 @@
 #include "config.h"
 #include "hcs_commands.h"
 #include "hcs_boiler_text.h"
+#include "hcs_sensors.h"
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
 #include "ot_gateway.h"
 #endif
@@ -345,4 +346,47 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
   }
 #endif
 
+  // 1-Wire probes: retained snapshot + custom leaves under x/<name>
+  if (sensors_ && sensors_->enabled()) {
+    unsigned long now = millis();
+    String j = "{\"enabled\":true,\"devices\":[";
+    for (size_t i = 0; i < sensors_->count(); i++) {
+      if (i) j += ',';
+      const hcs::OwDevice& d = sensors_->device(i);
+      hcs::OwSlot sl = sensors_->slotForDevice(i);
+      char hex[17];
+      hcs::ow_addr_to_hex(d.addr, hex);
+      j += "{\"addr\":\"";
+      j += hex;
+      j += "\",\"health\":\"";
+      j += hcs::ow_health_name(d.health);
+      j += "\",\"role\":\"";
+      j += hcs::ow_role_name((hcs::OwRole)sl.role);
+      j += "\"";
+      if (sl.role == hcs::OW_ROLE_CUSTOM && sl.name[0]) {
+        j += ",\"name\":\"";
+        j += sl.name;
+        j += "\"";
+      }
+      if (d.valid && d.health == hcs::OW_HEALTH_OK &&
+          (now - d.ts_ms) <= hcs::kOwStaleMs) {
+        j += ",\"temp_c\":";
+        j += f2(d.celsius);
+      } else {
+        j += ",\"temp_c\":null";
+      }
+      j += '}';
+    }
+    j += "]}";
+    publish(hcsTopic(node_id_, "sensors"), j, true);
+
+    char name[hcs::kOwNameMax + 1];
+    float c = NAN;
+    for (size_t i = 0; sensors_->customAt(i, name, &c, now); i++) {
+      if (name[0] && !isnan(c)) {
+        String leaf = String("x/") + name;
+        publish(hcsTopic(node_id_, leaf.c_str()), f2(c), true);
+      }
+    }
+  }
 }

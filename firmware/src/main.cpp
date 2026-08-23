@@ -252,10 +252,10 @@ void setup() {
   Serial.println(F("[dbg] post store"));
 #else
   applyWcSettings(settings);
-  sensors.configure(settings.ow_enable, settings.ow_addr_outdoor.c_str(),
-                    settings.ow_addr_return.c_str());
+  sensors.configure(settings.ow_enable, settings.ow_slots, hcs::kOwMaxSlots);
   if (HCS_ONEWIRE_PIN >= 0) sensors.begin();
   net.setSensors(&sensors);
+  mqtt.setSensors(&sensors);
 #endif
 
 #ifdef HCS_TEST_BOOT
