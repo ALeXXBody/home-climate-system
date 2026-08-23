@@ -568,6 +568,16 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
 
   // All mutating endpoints require the admin/OTA password when one is set.
   auto authOk = [this]() -> bool {
+    if (server.hasHeader("Origin")) {
+      String origin = server.header("Origin");
+      String host = server.hostHeader();
+      if (origin.length() && host.length() &&
+          origin.indexOf(host) < 0) {
+        server.send(403, "application/json",
+                    "{\"ok\":false,\"error\":\"cross-origin rejected\"}");
+        return false;
+      }
+    }
     if (settings_.ota_password.length() == 0) return true;
     if (server.authenticate("admin", settings_.ota_password.c_str())) return true;
     server.requestAuthentication();
@@ -879,6 +889,15 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     }
     server.send(200, "application/json", "{\"ok\":true}");
   });
+#endif
+
+  // Audit F14: collect Origin so mutating handlers can reject cross-site
+  // form posts (drive-by CSRF) even when no password is configured.
+#ifdef ESP8266
+  server.collectHeaders(String("Origin"));
+#else
+  static const char* kCorsHeaders[] = {"Origin"};
+  server.collectHeaders(kCorsHeaders, 1);
 #endif
 
   ElegantOTA.begin(&server);

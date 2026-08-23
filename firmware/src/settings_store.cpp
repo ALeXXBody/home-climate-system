@@ -11,8 +11,11 @@ static const int kEepromSize = 1024;
 // v5: + 1-Wire sensor config (enable + two probe addresses)
 // v4: gw_mode byte holds HcsGwCfg (0=auto,1=master_only,2=gateway);
 // v3 blobs carried a bool there and are migrated on load.
-static const uint32_t kMagic = 0x48435336;      // HCS6
-static const uint32_t kMagicV3 = 0x48435333;    // HCS3 (legacy bool gw_mode)
+static const uint32_t kMagic = 0x48435336;      // HCS6 (current)
+// Legacy blobs accepted by load() so OTA upgrades never wipe settings:
+static const uint32_t kMagicV5 = 0x48435335;    // HCS5 (+1-wire config)
+static const uint32_t kMagicV4 = 0x48435334;    // HCS4 (tri-state gw cfg)
+static const uint32_t kMagicV3 = 0x48435333;    // HCS3 (bool gw_mode)
 struct EepromBlob {
   uint32_t magic;
   uint16_t mqtt_port;
@@ -94,18 +97,23 @@ bool SettingsStore::load(HcsSettings& out) {
 #elif defined(ESP8266)
   EepromBlob b{};
   EEPROM.get(0, b);
-  if (b.configured && b.magic == kMagicV3) {
-    // legacy v3 bool: migrate once; next save() writes the v4 magic
-    if (b.gw_mode == 1) {
-      out.gw_cfg = HCS_GW_GATEWAY;
-    } else {
-      out.gw_cfg = HCS_GW_MASTER_ONLY;
-    }
-  } else if (b.magic == kMagic && b.gw_mode <= HCS_GW_GATEWAY) {
-    out.gw_cfg = b.gw_mode;
-  }
-  if (b.magic != kMagic && b.magic != kMagicV3) return false;
+  // Audit F13: accept every historical blob version — rejecting an older
+  // magic made OTA upgrades wipe WiFi/MQTT settings and drop the device
+  // back into captive-portal mode.
+  const bool v6 = b.magic == kMagic;
+  const bool v5 = b.magic == kMagicV5;
+  const bool v4 = b.magic == kMagicV4;
+  const bool v3 = b.magic == kMagicV3;
+  if (!v6 && !v5 && !v4 && !v3) return false;
   if (!b.configured) return false;
+
+  if (v3) {
+    // legacy v3 bool: migrate once; next save() writes the current magic
+    out.gw_cfg = b.gw_mode == 1 ? HCS_GW_GATEWAY : HCS_GW_MASTER_ONLY;
+  } else {  // v4 onward stores the tri-state value
+    out.gw_cfg =
+        b.gw_mode <= HCS_GW_GATEWAY ? b.gw_mode : HCS_GW_AUTO;
+  }
   out.wifi_ssid = String(b.wifi_ssid);
   out.wifi_pass = String(b.wifi_pass);
   out.mqtt_host = String(b.mqtt_host);
@@ -124,10 +132,12 @@ bool SettingsStore::load(HcsSettings& out) {
   out.wc_t_out_design = b.wc_t_out_design;
   out.wc_flow_max = b.wc_flow_max;
   out.wc_flow_min = b.wc_flow_min;
-  if (b.magic == kMagic) {
+  if (v5 || v6) {
     out.ow_enable = b.ow_enable != 0;
     out.ow_addr_outdoor = String(b.ow_addr_outdoor);
     out.ow_addr_return = String(b.ow_addr_return);
+  }
+  if (v6) {
     out.fs_enable = b.fs_enable != 0;
     out.fs_flow_c = b.fs_flow_c;
     out.fs_grace_min = b.fs_grace_min;
