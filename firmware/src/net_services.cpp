@@ -1,6 +1,7 @@
 #include "net_services.h"
 #include "config.h"
 #include "hcs_sensors.h"
+#include "mqtt_bridge.h"
 #include "hcs_boiler_text.h"
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
 #include "ot_gateway.h"
@@ -93,16 +94,17 @@ bool NetServices::beginWifi(HcsSettings& settings) {
   settings.wifi_ssid = WiFi.SSID();
   settings.wifi_pass = WiFi.psk();
   if (strlen(p_mqtt_host.getValue())) {
-    settings.mqtt_host = p_mqtt_host.getValue();
+    // trim every portal field — phone-typed forms love stray spaces/CRs
+    settings.mqtt_host = hcs_trim(p_mqtt_host.getValue());
     settings.mqtt_port = (uint16_t)atoi(p_mqtt_port.getValue());
     if (!settings.mqtt_port) settings.mqtt_port = 1883;
-    settings.mqtt_user = p_mqtt_user.getValue();
+    settings.mqtt_user = hcs_trim(p_mqtt_user.getValue());
     settings.mqtt_pass = p_mqtt_pass.getValue();
-    String pref = p_prefix.getValue();
+    String pref = hcs_trim(p_prefix.getValue());
     if (pref.length()) settings.mqtt_prefix = pref;
-    String node = p_node.getValue();
+    String node = hcs_trim(p_node.getValue());
     if (node.length()) settings.otgw_node = node;
-    String nm = p_name.getValue();
+    String nm = hcs_trim(p_name.getValue());
     if (nm.length()) settings.device_name = nm;
     settings.ota_password = p_ota.getValue();
   }
@@ -550,6 +552,12 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
       j += ",\"grace_min\":" + String(cfg.fs_grace_min);
       j += "}";
     }
+    // MQTT link visibility (host shown post-sanitisation)
+    if (MqttBridge* mb = MqttBridge::active()) {
+      j += ",\"mqtt_link\":{\"connected\":" +
+           String(mb->connectedOrNever() ? "true" : "false");
+      j += ",\"host\":\"" + mb->host() + "\",\"port\":" + mb->port() + "}";
+    }
     if (!isnan(s.flow_temp)) j += ",\"flow_temp\":" + String(s.flow_temp, 1);
     if (!isnan(s.return_temp))
       j += ",\"return_temp\":" + String(s.return_temp, 1);
@@ -615,19 +623,19 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     }
     const char* v;
     if ((v = d["device_name"] | (const char*)nullptr))
-      settings_.device_name = String(v).substring(0, 31);
+      settings_.device_name = hcs_trim(v).substring(0, 31);
     if ((v = d["mqtt_host"] | (const char*)nullptr))
-      settings_.mqtt_host = String(v).substring(0, 63);
+      settings_.mqtt_host = hcs_trim(v).substring(0, 63);
     int p = d["mqtt_port"] | -1;
     if (p > 0 && p < 65536) settings_.mqtt_port = (uint16_t)p;
     if ((v = d["mqtt_user"] | (const char*)nullptr))
-      settings_.mqtt_user = String(v).substring(0, 31);
+      settings_.mqtt_user = hcs_trim(v).substring(0, 31);
     if ((v = d["mqtt_pass"] | (const char*)nullptr))
       settings_.mqtt_pass = String(v).substring(0, 31);
     if ((v = d["mqtt_prefix"] | (const char*)nullptr))
-      settings_.mqtt_prefix = String(v).substring(0, 15);
+      settings_.mqtt_prefix = hcs_trim(v).substring(0, 15);
     if ((v = d["otgw_node"] | (const char*)nullptr))
-      settings_.otgw_node = String(v).substring(0, 31);
+      settings_.otgw_node = hcs_trim(v).substring(0, 31);
     if ((v = d["ota_password"] | (const char*)nullptr))
       settings_.ota_password = String(v).substring(0, 31);
 

@@ -5,6 +5,19 @@
 #include "ot_master.h"
 #include "hcs_failsafe.h"
 
+/** Trim spaces/CR/LF/TAB from both ends (portal forms & JSON payloads). */
+inline String hcs_trim(const String& in) {
+  String s = in;
+  s.trim();
+  while (s.length() && (s[0] == '\r' || s[0] == '\n')) s.remove(0, 1);
+  while (s.length()) {
+    char c = s[s.length() - 1];
+    if (c == '\r' || c == '\n') s.remove(s.length() - 1);
+    else break;
+  }
+  return s;
+}
+
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
 namespace hcs {
 class OtGateway;
@@ -54,6 +67,9 @@ class MqttBridge {
   String otgw_node_ = "hcs-device";
   String user_;
   String pass_;
+  String host_;
+  uint16_t port_ = 1883;
+  bool host_ok_ = false;
   unsigned long last_reconnect_ms_ = 0;
   unsigned long last_telemetry_ms_ = 0;
   unsigned long last_discovery_ms_ = 0;
@@ -73,6 +89,13 @@ class MqttBridge {
   void onMessage(char* topic, byte* payload, unsigned int length);
   static void thunk(char* topic, byte* payload, unsigned int length);
   static MqttBridge* instance_;
+
+ public:
+  static MqttBridge* active() { return instance_; }
+  /** Connection visibility for /api/status (safe when never begun). */
+  bool connectedOrNever() { return host_ok_ ? mqtt_.connected() : false; }
+  const String& host() const { return host_; }
+  uint16_t port() const { return port_; }
 
   void handleCommand(const String& topic, const String& payload);
   void publish(const String& topic, const String& payload, bool retain = false);

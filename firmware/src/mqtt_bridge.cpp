@@ -19,11 +19,32 @@ void MqttBridge::thunk(char* topic, byte* payload, unsigned int length) {
 
 void MqttBridge::begin(const char* host, uint16_t port, const char* user,
                        const char* pass) {
-  user_ = user ? user : "";
+  user_ = hcs_trim(user ? user : "");
   pass_ = pass ? pass : "";
-  mqtt_.setServer(host, port);
+  host_ = hcs_trim(host ? host : "");
+  if (!port) port = 1883;
+  port_ = port;
+  // Hosts/IPs never contain whitespace. Strip it (self-heals values saved
+  // dirty by portal forms) so PubSubClient cannot fail DNS silently.
+  while (host_.indexOf(' ') >= 0) host_.replace(" ", "");
+  while (host_.indexOf('\t') >= 0) host_.replace("\t", "");
+  while (host_.indexOf('\r') >= 0) host_.replace("\r", "");
+  while (host_.indexOf('\n') >= 0) host_.replace("\n", "");
+  host_ok_ = false;
+  if (!host_.length()) {
+    Serial.println("[mqtt] no broker configured");
+    return;
+  }
+  if (host_.length() > 63) {
+    Serial.println("[mqtt] broker host too long (>63)");
+    return;
+  }
+  host_ok_ = true;
+  mqtt_.setServer(host_.c_str(), port_);
   mqtt_.setCallback(thunk);
   mqtt_.setBufferSize(1024);
+  Serial.printf("[mqtt] broker %s:%u user='%s'\n", host_.c_str(), port_,
+                user_.length() ? user_.c_str() : "(anonymous)");
 }
 
 void MqttBridge::setDeviceInfo(const String& name, const String& ip,
@@ -34,6 +55,7 @@ void MqttBridge::setDeviceInfo(const String& name, const String& ip,
 }
 
 void MqttBridge::loop() {
+  if (!host_ok_) return;  // rejected/absent config: stay silent but visible
   if (!mqtt_.connected()) {
     reconnect();
   } else {
@@ -65,12 +87,19 @@ void MqttBridge::reconnect() {
   } else {
     ok = mqtt_.connect(clientId.c_str(), lwt.c_str(), 0, true, "offline");
   }
-  if (ok) {
-    publish(lwt, "online", true);
-    subscribeAll();
-    publishDiscovery();
-    last_discovery_ms_ = millis();
+  if (!ok) {
+    // PubSubClient state codes: -4 timeout, -3 lost, -2 failed(TCP/DNS),
+    // -1 disconnected, 5 bad user/pass — log EVERY failure so a dead
+    // broker link is never silent again.
+    Serial.printf("[mqtt] connect to %s:%u failed (state=%d)\n",
+                  host_.c_str(), port_, mqtt_.state());
+    return;
   }
+  Serial.println("[mqtt] connected");
+  publish(lwt, "online", true);
+  subscribeAll();
+  publishDiscovery();
+  last_discovery_ms_ = millis();
 }
 
 void MqttBridge::subscribeAll() {

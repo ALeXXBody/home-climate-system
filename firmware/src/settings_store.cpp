@@ -73,6 +73,10 @@ bool SettingsStore::load(HcsSettings& out) {
   out.ow_enable = prefs.getBool("ow_en", false);
   out.ow_addr_outdoor = prefs.getString("ow_out", "");
   out.ow_addr_return = prefs.getString("ow_ret", "");
+  out.mqtt_host.trim();
+  out.mqtt_user.trim();
+  out.mqtt_prefix.trim();
+  out.otgw_node.trim();
   out.fs_enable = prefs.getBool("fs_en", kFsEnableDefault);
   out.fs_flow_c = prefs.getFloat("fs_flow", kFsFlowDefaultC);
   out.fs_grace_min = prefs.getUChar("fs_grace", kFsGraceDefaultMin);
@@ -113,6 +117,7 @@ bool SettingsStore::load(HcsSettings& out) {
   out.otgw_node = String(b.otgw_node);
   if (!out.otgw_node.length()) out.otgw_node = "hcs-device";
   out.device_name = String(b.device_name);
+  out.mqtt_host.trim();
   out.ota_password = String(b.ota_password);
   out.wc_enable = b.wc_enable != 0;
   out.wc_t_out_ref = b.wc_t_out_ref;
