@@ -221,6 +221,7 @@ a{color:#03a9f4;text-decoration:none}
 <div class=card style=margin-top:10px>
 <label>Mode switch (saves &amp; reboots)</label>
 <button class=a onclick="setGwMode('gateway')">Enter gateway</button>
+<button onclick="setGwMode('auto')">Auto-detect at boot</button>
 <button class=g onclick="setGwMode('master_only')">Back to master-only</button>
 <label>Force CH flow setpoint sent to boiler (&deg;C)</label>
 <div class=row><input type=number id=g_ov_in min=20 max=90 step=0.5 placeholder=(thermostat value passes through)>
@@ -295,7 +296,7 @@ function paint(s){
  $('gw_ui').style.display=g?'block':'none';
  $('gw_na').style.display=g?'none':'block';
  if(g){
-  g_mode.textContent=g.mode;g_tstat.textContent=g.tstat_online?'ONLINE':'silent';
+  g_mode.textContent=g.mode+(g.cfg&&g.cfg!=='gateway'?' ('+g.cfg+')':'');g_tstat.textContent=g.tstat_online?'ONLINE':'silent';
   g_ov.textContent=g.override_setpoint!=null?g.override_setpoint+' °C':'pass-through';
   g_fwd.textContent=g.forwarded;g_loc.textContent=g.answered_local;
   g_mod.textContent=g.modified;g_err.textContent=g.errors;}
@@ -378,6 +379,7 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
       const hcs::GwCounters& c = gw_->counters();
       j += ",\"gw\":{";
       j += "\"mode\":\"gateway\",";
+      j += "\"cfg\":\"" + String(hcs_gw_cfg_name(settings_.gw_cfg)) + "\",";
       j += "\"tstat_online\":" +
            String(gw_->thermostatOnline() ? "true" : "false") + ",";
       float ov = gw_->overrideSetpointC();
@@ -388,6 +390,10 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
       j += "\"modified\":" + String(c.modified) + ",";
       j += "\"errors\":" + String(c.errors);
       j += "}";
+    } else {
+      // gateway compiled in but not active (auto-probe / forced master-only)
+      j += ",\"gw\":{\"mode\":\"master_only\",\"cfg\":\"" +
+           String(hcs_gw_cfg_name(settings_.gw_cfg)) + "\"}";
     }
 #endif
     if (!isnan(s.flow_temp)) j += ",\"flow_temp\":" + String(s.flow_temp, 1);
@@ -519,12 +525,16 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     JsonDocument d;
     DeserializationError e = deserializeJson(d, server.arg("plain"));
     const char* m = e ? "" : (const char*)(d["mode"] | "");
-    if (!strlen(m) || (strcmp(m, "gateway") && strcmp(m, "master_only"))) {
+    if (!strlen(m) || (strcmp(m, "gateway") && strcmp(m, "master_only") &&
+                       strcmp(m, "auto"))) {
       server.send(400, "application/json",
-                  "{\"ok\":false,\"error\":\"mode must be gateway|master_only\"}");
+                  "{\"ok\":false,\"error\":\"mode must be auto|gateway|master_only\"}");
       return;
     }
-    settings_.gw_mode = strcmp(m, "gateway") == 0;
+    uint8_t cfg = strcmp(m, "gateway") == 0   ? HCS_GW_GATEWAY
+                  : strcmp(m, "master_only") == 0 ? HCS_GW_MASTER_ONLY
+                                                  : HCS_GW_AUTO;
+    settings_.gw_cfg = cfg;
     SettingsStore store;
     store.begin();
     store.save(settings_);

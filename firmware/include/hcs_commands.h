@@ -24,6 +24,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include "hcs_gw_cfg.h"
 
 enum HcsCommand {
   HCS_CMD_NONE = 0,
@@ -118,7 +119,16 @@ inline HcsCommandResult hcs_parse_command(const char* topic, const char* payload
   }
   if (hcs_ends_with(topic, "/gw/set_mode")) {
     r.cmd = HCS_CMD_GW_MODE;
-    r.bool_value = hcs_ieq(payload, "gateway");
+    // payload: "auto" | "master_only" | "gateway" (legacy bools still work)
+    if (hcs_ieq(payload, "gateway") || hcs_ieq(payload, "gw"))
+      r.int_value = hcs::HCS_GW_GATEWAY;
+    else if (hcs_ieq(payload, "master_only") || hcs_ieq(payload, "master"))
+      r.int_value = hcs::HCS_GW_MASTER_ONLY;
+    else if (hcs_ieq(payload, "auto"))
+      r.int_value = hcs::HCS_GW_AUTO;
+    else
+      r.int_value =
+          hcs_truthy(payload) ? hcs::HCS_GW_GATEWAY : hcs::HCS_GW_MASTER_ONLY;
     return r;
   }
   if (hcs_ends_with(topic, "/gw/override_setpoint")) {

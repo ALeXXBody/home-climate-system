@@ -143,7 +143,7 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
       break;
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
     case HCS_CMD_GW_MODE:
-      if (gw_mode_cb_) gw_mode_cb_(r.bool_value);
+      if (gw_mode_cb_) gw_mode_cb_((uint8_t)r.int_value);
       break;
     case HCS_CMD_GW_OVERRIDE_SETPOINT:
       if (gw_override_cb_)
@@ -223,12 +223,17 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   if (gw_) {
     publish(hcsTopic(node_id_, "gw/mode"),
-            gw_mode_ ? gw_mode_ : "master_only", true);
+            gw_mode_ ? gw_mode_ : "gateway", true);
     publish(hcsTopic(node_id_, "gw/tstat_online"),
             gw_->thermostatOnline() ? "ON" : "OFF");
     float ov = gw_->overrideSetpointC();
     publish(hcsTopic(node_id_, "gw/override_setpoint"),
             isnan(ov) ? "" : f2(ov), true);
+  } else {
+    // gateway compiled in but inactive: keep retained state accurate
+    publish(hcsTopic(node_id_, "gw/mode"), "master_only", true);
+    publish(hcsTopic(node_id_, "gw/tstat_online"), "OFF");
+    publish(hcsTopic(node_id_, "gw/override_setpoint"), "", true);
   }
 #endif
 

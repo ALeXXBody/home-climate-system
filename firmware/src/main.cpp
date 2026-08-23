@@ -84,14 +84,35 @@ static void syncWcFromDevice() {
 }
 
 #ifdef HCS_GW_ENABLE
-static void requestGwMode(bool enable) {
-  settings.gw_mode = enable;
+static void requestGwMode(uint8_t cfg) {
+  if (cfg > HCS_GW_GATEWAY) return;
+  settings.gw_cfg = cfg;
   SettingsStore st;
   st.begin();
   st.save(settings);
-  Serial.printf("[gw] mode -> %s, rebooting\n", enable ? "gateway" : "master_only");
+  Serial.printf("[gw] role -> %s, rebooting\n", hcs_gw_cfg_name(cfg));
   delay(200);
   ESP.restart();
+}
+
+static bool gw_active = false;
+static bool gw_probing = false;
+static unsigned long gw_probe_start_ms = 0;
+static const unsigned long kGwProbeMs = hcs::kGwAutoWindowMs;
+
+/** Wire up (or tear down) runtime gateway services for the chosen role. */
+static void applyGwRole(bool gateway) {
+  if (gateway) {
+    ot.setAutopoll(false);  // master bus is driven by gateway forwarding now
+    gw.activate();          // slave RX already running during auto-probe
+    net.setGateway(&gw);
+    Serial.println("[gw] gateway mode ACTIVE");
+  } else {
+    net.setGateway(nullptr);
+    Serial.println("[gw] master-only mode");
+  }
+  gw_active = gateway;
+  mqtt.setGateway(gateway ? &gw : nullptr, gateway ? "gateway" : "master_only");
 }
 #endif
 
@@ -172,17 +193,22 @@ void setup() {
   }
 
 #ifdef HCS_GW_ENABLE
-  if (settings.gw_mode) {
-    ot.setAutopoll(false);  // master bus is driven by gateway forwarding now
+  if (settings.gw_cfg == HCS_GW_GATEWAY) {
+    ot.setAutopoll(false);
     gw.begin();
-    net.setGateway(&gw);
-    Serial.printf("[gw] gateway mode — thermostat bus %d/%d\n", OT2_IN_PIN,
+    applyGwRole(true);
+    Serial.printf("[gw] forced gateway — thermostat bus %d/%d\n", OT2_IN_PIN,
                   OT2_OUT_PIN);
+  } else if (settings.gw_cfg == HCS_GW_MASTER_ONLY) {
+    applyGwRole(false);
   } else {
-    Serial.println(F("[gw] master_only mode (gateway compiled in)"));
+    // AUTO: silent listen on the thermostat bus; decide after kGwProbeMs
+    gw.beginProbe();
+    gw_probing = true;
+    gw_probe_start_ms = millis();
+    Serial.printf("[gw] auto-detect: listening on %d/%d for %lus\n",
+                  OT2_IN_PIN, OT2_OUT_PIN, kGwProbeMs / 1000);
   }
-  mqtt.setGateway(settings.gw_mode ? &gw : nullptr,
-                  settings.gw_mode ? "gateway" : "master_only");
   mqtt.onGwMode(requestGwMode);
   mqtt.onGwOverride([](float c) { gw.setOverrideSetpointC(c); });
 #endif
@@ -216,7 +242,21 @@ void loop() {
 #endif
 
 #ifdef HCS_GW_ENABLE
-  if (settings.gw_mode) {
+  if (gw_probing) {
+    // AUTO phase: keep boiler autonomy, listen on thermostat bus silently
+    ot.poll();
+    gw.probeLoop();
+    int d = hcs::gw_autodetect_decide(gw.probeValidRequests(),
+                                      millis() - gw_probe_start_ms);
+    if (d) {
+      Serial.printf("[gw] auto-detect -> %s (%lu valid requests in %lus)\n",
+                    d == HCS_GW_GATEWAY ? "gateway" : "master_only",
+                    gw.probeValidRequests(),
+                    (millis() - gw_probe_start_ms) / 1000);
+      gw_probing = false;
+      applyGwRole(d == HCS_GW_GATEWAY);
+    }
+  } else if (gw_active) {
     gw.loop();  // answers thermostat + forwards to boiler on demand
   } else {
     ot.poll();  // autonomous ~1 Hz master cycle

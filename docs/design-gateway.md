@@ -13,8 +13,12 @@ work; see [`license-otgw.md`](license-otgw.md) for why no GPL sources are used.
 >   `lolin_c3_mini_gw`)
 > - Mode persisted in settings; boot applies saved mode (deviation from the
 >   "master_only after 10 s" idea below — simpler, mode switch always reboots)
-> - MQTT: `gw/mode`, `gw/set_mode`, `gw/tstat_online`, `gw/override_setpoint`
+> - MQTT: `gw/mode`, `gw/set_mode` (`auto|gateway|master_only`), `gw/tstat_online`,
+>   `gw/override_setpoint`
 > - Web UI: Gateway tab (mode switch + reboot, live counters, override)
+> - **Role auto-detect** (default `auto`): at boot the box silently listens on
+>   the thermostat bus for 15 s — ≥2 valid requests ⇒ gateway, silence ⇒
+>   master-only. Forced modes via MQTT/web always win.
 > - Still open: bench loopback (needs hardware) — turnkey checklist in
 >   [`bench-loopback.md`](bench-loopback.md)
 

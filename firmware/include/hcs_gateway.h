@@ -19,6 +19,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include "hcs_gw_cfg.h"
 
 namespace hcs {
 
@@ -182,6 +183,25 @@ inline void GatewayRouter::noteBoilerResponse(uint8_t resp_type, uint8_t id,
   (void)resp_type;
   if (resp_type == kTypeDataInvalid || resp_type == kTypeUnknownDataId) return;
   cachePut(id, data);
+}
+
+/**
+ * Auto-detect decision (portable, unit-tested).
+ *
+ * Called periodically while probing the thermostat-side bus at boot.
+ * Returns 0 while undecided, HCS_GW_GATEWAY once the window elapsed with
+ * >= kGwAutoMinFrames valid requests seen, else HCS_GW_MASTER_ONLY
+ * (values match enum HcsGwCfg in settings_store.h).
+ */
+constexpr unsigned long kGwAutoWindowMs = 15000;
+constexpr uint32_t kGwAutoMinFrames = 2;
+
+inline int gw_autodetect_decide(uint32_t valid_requests,
+                                unsigned long elapsed_ms,
+                                unsigned long window_ms = kGwAutoWindowMs) {
+  if (elapsed_ms < window_ms) return 0;  // keep listening
+  return valid_requests >= kGwAutoMinFrames ? (int)HCS_GW_GATEWAY
+                                            : (int)HCS_GW_MASTER_ONLY;
 }
 
 }  // namespace hcs

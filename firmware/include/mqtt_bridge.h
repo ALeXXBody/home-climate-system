@@ -33,8 +33,8 @@ class MqttBridge {
     gw_ = gw;
     gw_mode_ = mode;
   }
-  /** Mode switch requested via MQTT (true=gateway). Persist + reboot in cb. */
-  void onGwMode(void (*cb)(bool gateway)) { gw_mode_cb_ = cb; }
+  /** Mode switch requested via MQTT (HcsGwCfg value). Persist + reboot in cb. */
+  void onGwMode(void (*cb)(uint8_t cfg)) { gw_mode_cb_ = cb; }
   /** Override setpoint (NAN releases). */
   void onGwOverride(void (*cb)(float c)) { gw_override_cb_ = cb; }
 #endif
@@ -56,7 +56,7 @@ class MqttBridge {
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   hcs::OtGateway* gw_ = nullptr;
   const char* gw_mode_ = nullptr;
-  void (*gw_mode_cb_)(bool) = nullptr;
+  void (*gw_mode_cb_)(uint8_t) = nullptr;
   void (*gw_override_cb_)(float) = nullptr;
 #endif
 

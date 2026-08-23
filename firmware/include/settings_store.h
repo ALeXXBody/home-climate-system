@@ -2,7 +2,15 @@
 // Persistent settings (NVS Preferences on ESP32, EEPROM blob on ESP8266)
 
 #include <Arduino.h>
+#include "hcs_gw_cfg.h"
 #include "hcs_weather_comp.h"
+
+// Re-export gateway-role names for unqualified use across firmware sources
+using hcs::HcsGwCfg;
+using hcs::HCS_GW_AUTO;
+using hcs::HCS_GW_MASTER_ONLY;
+using hcs::HCS_GW_GATEWAY;
+using hcs::hcs_gw_cfg_name;
 
 struct HcsSettings {
   String wifi_ssid;
@@ -24,8 +32,8 @@ struct HcsSettings {
   float wc_flow_max = 65.0f;
   float wc_flow_min = 25.0f;
 
-  // Gateway mode (meaningful on ESP32 gateway builds only)
-  bool gw_mode = false;
+  // Gateway role (meaningful on ESP32 gateway builds only; see HcsGwCfg)
+  uint8_t gw_cfg = HCS_GW_AUTO;
 };
 
 class SettingsStore {

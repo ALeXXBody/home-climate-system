@@ -7,8 +7,10 @@ static Preferences prefs;
 #include <EEPROM.h>
 // Simple blob store on ESP8266
 static const int kEepromSize = 1024;
-// v3: + gateway mode flag
-static const uint32_t kMagic = 0x48435333;  // HCS3
+// v4: gw_mode byte now holds HcsGwCfg (0=auto,1=master_only,2=gateway);
+// v3 blobs carried a bool there and are migrated on load.
+static const uint32_t kMagic = 0x48435334;      // HCS4
+static const uint32_t kMagicV3 = 0x48435333;    // HCS3 (legacy bool gw_mode)
 struct EepromBlob {
   uint32_t magic;
   uint16_t mqtt_port;
@@ -58,12 +60,32 @@ bool SettingsStore::load(HcsSettings& out) {
   out.wc_t_out_design = prefs.getFloat("wc_dsn", -10.0f);
   out.wc_flow_max = prefs.getFloat("wc_fmax", 65.0f);
   out.wc_flow_min = prefs.getFloat("wc_fmin", 25.0f);
-  out.gw_mode = prefs.getBool("gw_mode", false);
+  if (prefs.isKey("gw_cfg")) {
+    uint8_t cfg = prefs.getUChar("gw_cfg", HCS_GW_AUTO);
+    out.gw_cfg = (cfg <= HCS_GW_GATEWAY) ? cfg : HCS_GW_AUTO;
+  } else if (prefs.isKey("gw_mode")) {
+    // legacy bool key: preserve the explicit choice it represented
+    out.gw_cfg =
+        prefs.getBool("gw_mode", false) ? HCS_GW_GATEWAY : HCS_GW_MASTER_ONLY;
+  } else {
+    out.gw_cfg = HCS_GW_AUTO;  // fresh install: auto-detect
+  }
   return out.wifi_ssid.length() > 0;
 #elif defined(ESP8266)
   EepromBlob b{};
   EEPROM.get(0, b);
-  if (b.magic != kMagic || !b.configured) return false;
+  if (b.configured && b.magic == kMagicV3) {
+    // legacy v3 bool: migrate once; next save() writes the v4 magic
+    if (b.gw_mode == 1) {
+      out.gw_cfg = HCS_GW_GATEWAY;
+    } else {
+      out.gw_cfg = HCS_GW_MASTER_ONLY;
+    }
+  } else if (b.magic == kMagic && b.gw_mode <= HCS_GW_GATEWAY) {
+    out.gw_cfg = b.gw_mode;
+  }
+  if (b.magic != kMagic && b.magic != kMagicV3) return false;
+  if (!b.configured) return false;
   out.wifi_ssid = String(b.wifi_ssid);
   out.wifi_pass = String(b.wifi_pass);
   out.mqtt_host = String(b.mqtt_host);
@@ -81,7 +103,6 @@ bool SettingsStore::load(HcsSettings& out) {
   out.wc_t_out_design = b.wc_t_out_design;
   out.wc_flow_max = b.wc_flow_max;
   out.wc_flow_min = b.wc_flow_min;
-  out.gw_mode = b.gw_mode == 1;  // garbage/0xFF -> master_only
   out.configured = true;
   return out.wifi_ssid.length() > 0;
 #endif
@@ -100,6 +121,7 @@ bool SettingsStore::save(const HcsSettings& in) {
   prefs.putString("otgw_node", in.otgw_node);
   prefs.putString("dev_name", in.device_name);
   prefs.putString("ota_pass", in.ota_password);
+  prefs.putUChar("gw_cfg", in.gw_cfg);
   return true;
 #elif defined(ESP8266)
   EepromBlob b{};
@@ -120,7 +142,7 @@ bool SettingsStore::save(const HcsSettings& in) {
   b.wc_t_out_design = in.wc_t_out_design;
   b.wc_flow_max = in.wc_flow_max;
   b.wc_flow_min = in.wc_flow_min;
-  b.gw_mode = in.gw_mode ? 1 : 0;
+  b.gw_mode = (in.gw_cfg <= HCS_GW_GATEWAY) ? in.gw_cfg : HCS_GW_AUTO;
   EEPROM.put(0, b);
   return EEPROM.commit();
 #endif

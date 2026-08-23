@@ -16,6 +16,7 @@ void OtSlave::begin() {
 void OtSlave::onFrame(unsigned long frame, OpenThermResponseStatus st) {
   seen_++;
   if (st != OpenThermResponseStatus::SUCCESS) return;
+  valid_++;
   req_ = frame;
   last_req_ms_ = millis();
   pending_ = true;

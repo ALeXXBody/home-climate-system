@@ -29,6 +29,8 @@ class OtSlave {
   bool pending() const { return pending_; }
   unsigned long lastRequestMs() const { return last_req_ms_; }
   uint32_t framesSeen() const { return seen_; }
+  /** Frames that decoded as valid OpenTherm requests (SUCCESS). */
+  uint32_t validRequests() const { return valid_; }
 
  private:
   static OtSlave* instance_;
@@ -40,6 +42,7 @@ class OtSlave {
   uint32_t req_ = 0;
   unsigned long last_req_ms_ = 0;
   uint32_t seen_ = 0;
+  uint32_t valid_ = 0;
 };
 
 }  // namespace hcs

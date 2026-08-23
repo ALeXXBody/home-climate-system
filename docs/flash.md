@@ -98,15 +98,19 @@ mosquitto_sub -h <broker> -t 'OTGW/#' -v
 
 ## 5. Gateway mode (gateway builds only)
 
-After flashing a `*_gw` env the device boots as an OpenTherm **master**
-(thermostat replacement). Switch to gateway mode — it forwards thermostat
-traffic to the boiler and answers locally only when asked:
+Gateway builds default to **auto-detect**: after boot the device listens
+silently on the thermostat-side pins for 15 s. If a real thermostat polls
+(≥2 valid requests), it promotes itself to gateway; otherwise it stays a
+plain master. No manual switch needed for either setup.
+
+You can still force the role — useful when the thermostat is powered off at
+boot time or you want to skip the probe window:
 
 ```bash
-# via MQTT (retained)
+# via MQTT (retained): auto | gateway | master_only
 mosquitto_pub -h <broker> -t 'hcs/hcs-aabbccddeeff/gw/set_mode' -m 'gateway'
 
-# or web UI → Gateway tab → switch mode (reboots into gateway mode)
+# or web UI → Gateway tab → switch (reboots)
 ```
 
 Verify forwarding: `gw/tstat_online` flips to `true` once the real

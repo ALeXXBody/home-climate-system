@@ -295,16 +295,54 @@ void test_gw_f88_roundtrip(void) {
 void test_gw_set_mode_parse(void) {
   HcsCommandResult gw = parse("hcs/n/set/gw/set_mode", "gateway");
   TEST_ASSERT_EQUAL(HCS_CMD_GW_MODE, gw.cmd);
-  TEST_ASSERT_TRUE(gw.bool_value);
+  TEST_ASSERT_EQUAL_INT(hcs::HCS_GW_GATEWAY, gw.int_value);
 
   HcsCommandResult mo = parse("hcs/n/set/gw/set_mode", "master_only");
   TEST_ASSERT_EQUAL(HCS_CMD_GW_MODE, mo.cmd);
-  TEST_ASSERT_FALSE(mo.bool_value);
+  TEST_ASSERT_EQUAL_INT(hcs::HCS_GW_MASTER_ONLY, mo.int_value);
+
+  HcsCommandResult au = parse("hcs/n/set/gw/set_mode", "auto");
+  TEST_ASSERT_EQUAL(HCS_CMD_GW_MODE, au.cmd);
+  TEST_ASSERT_EQUAL_INT(hcs::HCS_GW_AUTO, au.int_value);
+
+  HcsCommandResult legacy = parse("hcs/n/set/gw/set_mode", "1");
+  TEST_ASSERT_EQUAL(HCS_CMD_GW_MODE, legacy.cmd);
+  TEST_ASSERT_EQUAL_INT(hcs::HCS_GW_GATEWAY, legacy.int_value);
 
   HcsCommandResult junk = parse("hcs/n/set/gw/set_mode", "banana");
   TEST_ASSERT_EQUAL(HCS_CMD_GW_MODE, junk.cmd);
-  TEST_ASSERT_FALSE(junk.bool_value);  // anything unknown -> master_only
+  // anything unknown falls back to the legacy bool mapping -> master_only
+  TEST_ASSERT_EQUAL_INT(hcs::HCS_GW_MASTER_ONLY, junk.int_value);
 }
+
+// ---------- gateway role auto-detect ----------
+void test_gw_autodetect_undecided_before_window(void) {
+  // even many valid frames mean nothing until the window elapses
+  TEST_ASSERT_EQUAL_INT(0, hcs::gw_autodetect_decide(50, 0));
+  TEST_ASSERT_EQUAL_INT(0, hcs::gw_autodetect_decide(50, 14999));
+}
+
+void test_gw_autodetect_master_when_silent(void) {
+  TEST_ASSERT_EQUAL_INT((int)hcs::HCS_GW_MASTER_ONLY,
+                        hcs::gw_autodetect_decide(0, hcs::kGwAutoWindowMs));
+  TEST_ASSERT_EQUAL_INT((int)hcs::HCS_GW_MASTER_ONLY,
+                        hcs::gw_autodetect_decide(1, hcs::kGwAutoWindowMs + 1));
+}
+
+void test_gw_autodetect_gateway_with_two_frames(void) {
+  TEST_ASSERT_EQUAL_INT(
+      (int)hcs::HCS_GW_GATEWAY, hcs::gw_autodetect_decide(2, hcs::kGwAutoWindowMs));
+  TEST_ASSERT_EQUAL_INT(
+      (int)hcs::HCS_GW_GATEWAY,
+      hcs::gw_autodetect_decide(100, hcs::kGwAutoWindowMs * 3));
+}
+
+void test_gw_autodetect_custom_window(void) {
+  TEST_ASSERT_EQUAL_INT(0, hcs::gw_autodetect_decide(5, 4999, 5000));
+  TEST_ASSERT_EQUAL_INT((int)hcs::HCS_GW_GATEWAY,
+                        hcs::gw_autodetect_decide(5, 5000, 5000));
+}
+
 
 void test_gw_override_parse(void) {
   HcsCommandResult set = parse("hcs/n/set/gw/override_setpoint", "48.5");
@@ -360,6 +398,10 @@ int main(void) {
   RUN_TEST(test_gw_link_up_always_forwards_even_if_cached);
   RUN_TEST(test_gw_f88_roundtrip);
   RUN_TEST(test_gw_set_mode_parse);
+  RUN_TEST(test_gw_autodetect_undecided_before_window);
+  RUN_TEST(test_gw_autodetect_master_when_silent);
+  RUN_TEST(test_gw_autodetect_gateway_with_two_frames);
+  RUN_TEST(test_gw_autodetect_custom_window);
   RUN_TEST(test_gw_override_parse);
   RUN_TEST(test_gw_topics_do_not_shadow_flow_setpoint);
   return UNITY_END();
