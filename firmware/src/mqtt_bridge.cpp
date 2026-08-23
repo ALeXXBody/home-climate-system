@@ -31,8 +31,9 @@ void MqttBridge::begin(const char* host, uint16_t port, const char* user,
   while (host_.indexOf('\r') >= 0) host_.replace("\r", "");
   while (host_.indexOf('\n') >= 0) host_.replace("\n", "");
   host_ok_ = false;
-  if (!host_.length()) {
-    Serial.println("[mqtt] no broker configured");
+  if (!host_.length() || hcs_host_is_placeholder(host_)) {
+    Serial.printf("[mqtt] no broker configured (%s)\n",
+                  host_.length() ? "template placeholder" : "empty");
     return;
   }
   if (host_.length() > 63) {

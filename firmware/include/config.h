@@ -2,7 +2,7 @@
 // Compile-time defaults. Runtime WiFi/MQTT come from captive portal (NVS).
 
 #ifndef HCS_FW_VERSION
-#define HCS_FW_VERSION "1.0.0"
+#define HCS_FW_VERSION "1.0.1"
 #endif
 
 #ifndef HCS_BOARD_NAME

@@ -122,8 +122,11 @@ bool NetServices::beginWifi(HcsSettings& settings) {
     if (nm.length()) settings.device_name = nm;
     settings.ota_password = p_ota.getValue();
   }
-  // Compile-time fallbacks if portal left MQTT empty
-  if (!settings.mqtt_host.length() && strlen(MQTT_HOST)) {
+  // Compile-time fallback if portal left MQTT empty — but never accept a
+  // secrets-template placeholder as "configured".
+  if ((!settings.mqtt_host.length() ||
+       hcs_host_is_placeholder(settings.mqtt_host)) &&
+      strlen(MQTT_HOST) && !hcs_host_is_placeholder(MQTT_HOST)) {
     settings.mqtt_host = MQTT_HOST;
     settings.mqtt_port = MQTT_PORT;
     settings.mqtt_user = MQTT_USER;

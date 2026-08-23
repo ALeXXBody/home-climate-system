@@ -5,6 +5,12 @@
 #include "ot_master.h"
 #include "hcs_failsafe.h"
 
+/** True for template placeholders like "192.168.50.xxx" / "xxx.local". */
+inline bool hcs_host_is_placeholder(const String& h) {
+  if (h.length() == 0) return false;
+  return h.indexOf("xxx") >= 0 || h.indexOf("XXX") >= 0;
+}
+
 /** Trim spaces/CR/LF/TAB from both ends (portal forms & JSON payloads). */
 inline String hcs_trim(const String& in) {
   String s = in;
