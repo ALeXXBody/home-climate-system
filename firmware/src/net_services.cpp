@@ -178,7 +178,9 @@ a{color:#03a9f4;text-decoration:none}
 <div class=card><h3>Outdoor</h3><div class=v><span id=otemp>&mdash;</span><span class=u> &deg;C</span></div></div>
 <div class=card><h3>Modulation</h3><div class=v><span id=mod>&mdash;</span><span class=u> %</span></div></div>
 <div class=card><h3>Setpoint</h3><div class=v><span id=fsp>&mdash;</span><span class=u> &deg;C</span></div></div>
-<div class=card style="grid-column:1/-1"><h3>Boiler diagnostics</h3><div class=v id=bdiag style="font-size:1rem">&mdash;</div></div>
+<div class=card><h3>CH pressure</h3><div class=v><span id=prbar>&mdash;</span><span class=u> bar</span></div></div>
+<div class=card style="grid-column:1/-1"><h3>Boiler diagnostics</h3><div class=v id=bdiag style="font-size:1rem">&mdash;</div>
+<div style="color:#999;font-size:.8rem;margin-top:6px" id=bident></div></div>
 </div></section>
 <section id=t-controls>
 <div class=card>
@@ -190,6 +192,10 @@ a{color:#03a9f4;text-decoration:none}
 <div class=row><button class=a onclick="ctl({dhw_enable:true})">DHW on</button>
 <button class=g onclick="ctl({dhw_enable:false})">DHW off</button>
 <span style="margin-left:auto">now: <b id=cdhw>&mdash;</b></span></div>
+<label>DHW setpoint (&deg;C) <span style="color:#999" id=dhwbounds></span></label>
+<div class=row><input type=number id=idsp min=30 max=60 step=1 value=50>
+<button class=a onclick="ctl({dhw_setpoint:+idsp.value})">Apply</button>
+<button class=g onclick="ctl({dhw_setpoint:'auto'})">Auto (thermostat)</button></div>
 <label>Flow setpoint (&deg;C)</label>
 <div class=row><input type=number id=isfp min=20 max=90 step=0.5 value=45>
 <button class=a onclick="ctl({flow_setpoint:+isfp.value})">Apply</button></div>
@@ -307,6 +313,14 @@ function paint(s){
   const bd=s.boiler_diag;
   if(bd){$('bdiag').textContent=bd.text;$('bdiag').style.color=
     bd.state==='fault'?'#ef5350':bd.state==='ok'?'#81c784':'inherit';}
+  $('prbar').textContent=s.pressure_bar??'—';
+  let ident=[];
+  if(s.boiler){if(s.boiler.identity)ident.push(s.boiler.identity);
+   if(s.boiler.fault_history)ident.push('Fault history: '+s.boiler.fault_history);}
+  $('bident').textContent=ident.join(' · ');
+  if(s.dhw_setpoint!=null&&!['idsp'].includes(document.activeElement?.id)){
+   idsp.value=s.dhw_setpoint;
+   dhwbounds.textContent=s.boiler?.dhw_bounds?('boiler allows '+s.boiler.dhw_bounds):'';}
  $('fsp').textContent=s.flow_setpoint;$('cch').textContent=yn(s.ch_enable);
  $('cdhw').textContent=yn(s.dhw_enable);
  $('i_board').textContent=s.board+' · '+s.ip;
@@ -466,6 +480,38 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
       if (bd.valid_oem) bdd["oem"] = bd.oem;
       j += ",\"boiler_diag\":";
       serializeJson(bdd, j);
+    }
+    // Boiler identity / capability summary
+    {
+      JsonDocument bid;
+      String ident = "";
+      if (s.valid_slave_cfg)
+        ident += "slave member " + String(s.slave_member_id) + " config 0x" +
+                 String(s.slave_config, HEX);
+      if (s.valid_master_cfg) {
+        if (ident.length()) ident += "; ";
+        ident += "master member " + String(s.master_member_id) + " config 0x" +
+                 String(s.master_config, HEX);
+      }
+      if (s.valid_capacity && ident.length())
+        ident += "; " + String(s.capacity_kw) + " kW min-mod " +
+                 String(s.min_mod_pct) + "%";
+      if (ident.length()) bid["identity"] = ident;
+      if (s.valid_fhb && s.fhb_count) {
+        char fhb[64];
+        hcs::ot_fhb_format(s.fhb_codes, s.fhb_count, fhb, sizeof(fhb));
+        bid["fault_history"] = fhb;
+      }
+      if (s.valid_dhw_bounds) {
+        String b = String((int)s.dhw_lb) + ".." + String((int)s.dhw_ub);
+        bid["dhw_bounds"] = b;
+      }
+      if (!bid.isNull()) j += ",\"boiler\":";
+      if (!bid.isNull()) serializeJson(bid, j);
+      if (s.valid_pressure)
+        j += ",\"pressure_bar\":" + String(s.pressure_bar, 2);
+      if (!isnan(ot_.dhwSetpoint()))
+        j += ",\"dhw_setpoint\":" + String(ot_.dhwSetpoint(), 1);
     }
     if (!isnan(s.flow_temp)) j += ",\"flow_temp\":" + String(s.flow_temp, 1);
     if (!isnan(s.return_temp))

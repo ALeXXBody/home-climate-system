@@ -31,6 +31,7 @@ enum HcsCommand {
   HCS_CMD_CH_ENABLE,
   HCS_CMD_DHW_ENABLE,
   HCS_CMD_FLOW_SETPOINT,
+  HCS_CMD_DHW_SETPOINT,
   HCS_CMD_MAX_MODULATION,
   HCS_CMD_WEATHER_COMP,
   HCS_CMD_WEATHER_COMP_CFG,
@@ -89,6 +90,12 @@ inline HcsCommandResult hcs_parse_command(const char* topic, const char* payload
   }
   if (hcs_ends_with(topic, "/flow_setpoint") || hcs_ends_with(topic, "/ctrlsetpt")) {
     r.cmd = HCS_CMD_FLOW_SETPOINT;
+    r.float_value = (float)atof(payload);
+    return r;
+  }
+  if (hcs_ends_with(topic, "/dhw_setpoint") ||
+      hcs_ends_with(topic, "/hotwater_setpoint")) {
+    r.cmd = HCS_CMD_DHW_SETPOINT;
     r.float_value = (float)atof(payload);
     return r;
   }

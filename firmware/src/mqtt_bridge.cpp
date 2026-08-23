@@ -123,6 +123,13 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
     case HCS_CMD_FLOW_SETPOINT:
       ot_.setFlowSetpoint(r.float_value);
       break;
+    case HCS_CMD_DHW_SETPOINT:
+      // "off"/"auto" releases control back to the boiler/thermostat
+      ot_.setDhwSetpoint(hcs_ieq(payload.c_str(), "off") ||
+                                 hcs_ieq(payload.c_str(), "auto")
+                             ? (float)NAN
+                             : r.float_value);
+      break;
     case HCS_CMD_MAX_MODULATION:
       ot_.setMaxModulation((int)r.int_value);
       break;
@@ -212,6 +219,9 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
       publish(hcsTopic(node_id_, "outdoor_temp"), f2(s.outdoor_temp));
     if (!isnan(s.modulation))
       publish(hcsTopic(node_id_, "modulation"), f2(s.modulation));
+    if (s.valid_pressure) publish(hcsTopic(node_id_, "ch_pressure"), f2(s.pressure_bar));
+    if (!isnan(ot_.dhwSetpoint()))
+      publish(hcsTopic(node_id_, "dhw_setpoint"), f2(ot_.dhwSetpoint()), true);
   }
 
   // Boiler diagnostics -> retained clean text + raw numbers (change-gated)
@@ -231,6 +241,35 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
       publish(hcsTopic(node_id_, "boiler_state"), state, true);
       last_txt = txt_s;
       last_state = state;
+    }
+  }
+
+  // Boiler identity + fault history (retained, change-gated)
+  {
+    static String last_ident, last_fhb;
+    char fhb[64] = "";
+    hcs::ot_fhb_format(s.fhb_codes, s.fhb_count, fhb, sizeof(fhb));
+    String ident = "";
+    if (s.valid_slave_cfg)
+      ident += "slave member " + String(s.slave_member_id) + " config 0x" +
+               String(s.slave_config, HEX);
+    if (s.valid_master_cfg) {
+      if (ident.length()) ident += "; ";
+      ident += "master member " + String(s.master_member_id) + " config 0x" +
+               String(s.master_config, HEX);
+    }
+    if (s.valid_capacity && ident.length())
+      ident += "; " + String(s.capacity_kw) + " kW min-mod " +
+               String(s.min_mod_pct) + "%";
+    if (s.valid_fhb && ident.length())
+      ident += "; FHB size " + String(s.fhb_size);
+    if (ident != last_ident) {
+      publish(hcsTopic(node_id_, "boiler_identity"), ident, true);
+      last_ident = ident;
+    }
+    if (String(fhb) != last_fhb) {
+      publish(hcsTopic(node_id_, "fault_history"), fhb, true);
+      last_fhb = String(fhb);
     }
   }
 

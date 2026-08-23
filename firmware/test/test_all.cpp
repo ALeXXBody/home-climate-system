@@ -7,6 +7,7 @@
 #include "hcs_weather_comp.h"
 #include "hcs_sensor_logic.h"
 #include "hcs_boiler_text.h"
+#include "hcs_ot_caps.h"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -482,6 +483,51 @@ void test_boiler_diag_truncated_buffer_is_safe(void) {
   TEST_ASSERT_TRUE(strlen(tiny) < sizeof(tiny));
 }
 
+// ---------- boiler capabilities ----------
+void test_ot_clamp_bounds(void) {
+  // known bounds enforced
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 55.0f,
+      hcs::ot_clamp_with_bounds(80.0f, true, 0, 55, 10, 90));
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 20.0f,
+      hcs::ot_clamp_with_bounds(20.0f, true, 0, 55, 10, 90));
+  // unknown bounds -> defaults; 80 is inside [10,90] so passes through
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 80.0f,
+      hcs::ot_clamp_with_bounds(80.0f, false, 0, 55, 10, 90));
+}
+
+void test_ot_slow_read_round_robin(void) {
+  // first seven cycles cover pressure, cfgs, capacity, bounds, fhb
+  TEST_ASSERT_EQUAL_UINT16(18, hcs::ot_slow_read_id(0));
+  TEST_ASSERT_EQUAL_UINT16(3, hcs::ot_slow_read_id(1));
+  TEST_ASSERT_EQUAL_UINT16(2, hcs::ot_slow_read_id(2));
+  TEST_ASSERT_EQUAL_UINT16(15, hcs::ot_slow_read_id(3));
+  TEST_ASSERT_EQUAL_UINT16(48, hcs::ot_slow_read_id(4));
+  TEST_ASSERT_EQUAL_UINT16(49, hcs::ot_slow_read_id(5));
+  TEST_ASSERT_EQUAL_UINT16(13, hcs::ot_slow_read_id(6));
+  TEST_ASSERT_EQUAL_UINT16(18, hcs::ot_slow_read_id(7));   // wraps
+  TEST_ASSERT_EQUAL_UINT16(18, hcs::ot_slow_read_id(1001)); // 1001 %% 7 == 0
+}
+
+void test_ot_rbp_dhw_write_flag(void) {
+  TEST_ASSERT_TRUE(hcs::ot_rbp_dhw_write_enabled(0x10));
+  TEST_ASSERT_TRUE(hcs::ot_rbp_dhw_write_enabled(0xF0));
+  TEST_ASSERT_FALSE(hcs::ot_rbp_dhw_write_enabled(0x00));
+  TEST_ASSERT_FALSE(hcs::ot_rbp_dhw_write_enabled(0x0F));
+}
+
+void test_ot_fhb_format(void) {
+  uint8_t codes[] = {0x01, 0xAB, 0x05};
+  char out[32];
+  hcs::ot_fhb_format(codes, 3, out, sizeof(out));
+  TEST_ASSERT_EQUAL_STRING("01 AB 05", out);
+  hcs::ot_fhb_format(codes, 0, out, sizeof(out));
+  TEST_ASSERT_EQUAL_STRING("", out);
+  // truncation safety
+  char tiny[5];
+  hcs::ot_fhb_format(codes, 3, tiny, sizeof(tiny));
+  TEST_ASSERT_TRUE(strlen(tiny) < sizeof(tiny));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_ch_enable_on_variants);
@@ -531,6 +577,10 @@ int main(void) {
   RUN_TEST(test_boiler_diag_asf_bits);
   RUN_TEST(test_boiler_diag_oem_code);
   RUN_TEST(test_boiler_diag_truncated_buffer_is_safe);
+  RUN_TEST(test_ot_clamp_bounds);
+  RUN_TEST(test_ot_slow_read_round_robin);
+  RUN_TEST(test_ot_rbp_dhw_write_flag);
+  RUN_TEST(test_ot_fhb_format);
   RUN_TEST(test_gw_override_parse);
   RUN_TEST(test_gw_topics_do_not_shadow_flow_setpoint);
   return UNITY_END();

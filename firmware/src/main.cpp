@@ -281,6 +281,16 @@ void loop() {
   } else if (gw_active) {
     gw.loop();  // answers thermostat + forwards to boiler on demand
     ot.applySensorInject();  // keep telemetry sensor-correct between forwards
+    // Reference mode: when the wall thermostat goes silent, keep light
+    // monitoring alive (status + diagnostics + capabilities) like the PIC
+    // gateway's M=G does — never writing setpoints the thermostat owns.
+    static unsigned long last_ref_ms = 0;
+    if (!gw.thermostatOnline(10000) && millis() - last_ref_ms > 60000) {
+      last_ref_ms = millis();
+      ot.referencePoll();
+      ot.applySensorInject();
+      mqtt.publishTelemetry(ot.snap());  // refresh retained topics
+    }
   } else {
     ot.poll();  // autonomous ~1 Hz master cycle (injects sensors inside poll)
   }

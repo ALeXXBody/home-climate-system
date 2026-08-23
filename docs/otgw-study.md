@@ -81,3 +81,20 @@ auto-detect, OTGW-compat MQTT subjects.
   fault-history dump as part of diagnostics page.
 - Remote-parameter write-enable handshake (RBPflags ID 6) needed before DHW
   setpoint writes are accepted — verify on bench before shipping P2-DHW.
+
+## 6. Postscript — corrections & the boiler in question
+
+**Corrections to §3 (verified against the ihormelnyk lib enum):**
+ID 56 is `TdhwSet` and ID 57 is `MaxTSet` — *remote-parameter values*, not
+bounds (real bounds live at IDs 48/49). So the observed 51 °C / 55 °C frames
+mean the DHW setpoint is being **actively written remotely** on this
+installation (by OTGW/HA), proving the boiler accepts remote-parameter
+writes without an explicit RBPflags handshake. HCS therefore writes TdhwSet
+(ID 56) directly, clamped by bounds read from ID 48.
+
+**The boiler:** Viessmann **Vitodens 100-W, model B1KF**, fitted with the
+optional low-power radio module (Zigbee-based OpenTherm adapter). Owner
+reports ~30 kW unit configured at 15 kW max capacity — consistent with the
+observed `MaxCapacity=15 kW / min-modulation 17 %` from ID 15. No return-temp
+(ID 28) value reported → use a DS18B20 probe assigned as `return` in the
+Sensors tab (HCS v0.5 feature) for return telemetry.
