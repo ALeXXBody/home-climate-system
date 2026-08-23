@@ -51,11 +51,9 @@ void MqttBridge::begin(const char* host, uint16_t port, const char* user,
                 user_.length() ? user_.c_str() : "(anonymous)");
 }
 
-void MqttBridge::setDeviceInfo(const String& name, const String& ip,
-                               const String& otgwNode) {
+void MqttBridge::setDeviceInfo(const String& name, const String& ip) {
   device_name_ = name;
   ip_ = ip;
-  if (otgwNode.length()) otgw_node_ = otgwNode;
 }
 
 void MqttBridge::loop() {
@@ -123,13 +121,6 @@ void MqttBridge::subscribeAll() {
   mqtt_.subscribe(hcsSetTopic(node_id_, "gw/set_mode").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "gw/override_setpoint").c_str());
 #endif
-
-  // OTGW-compat (node from settings)
-  String base = String(OTGW_COMPAT_PREFIX) + "/set/" + otgw_node_ + "/";
-  mqtt_.subscribe((base + "chenable").c_str());
-  mqtt_.subscribe((base + "ctrlsetpt").c_str());
-  mqtt_.subscribe((base + "maxmodulation").c_str());
-  mqtt_.subscribe((base + "failsafe_cfg").c_str());
 
   // Global discovery ping
   mqtt_.subscribe("hcs/discovery/ping");
@@ -294,7 +285,6 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
             : (*fs_state_ptr_ == hcs::FsState::HOLD ? "HOLD" : "OFF");
     if (v != last_fs) {
       publish(hcsTopic(node_id_, "failsafe"), v, true);
-      publish(otgwValue("failsafe"), v, true);
       last_fs = v;
     }
   }
@@ -355,18 +345,4 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
   }
 #endif
 
-  // OTGW-compat
-  if (s.valid) {
-    publish(otgwValue("flamestatus"), s.flame ? "ON" : "OFF");
-    publish(otgwValue("chmodus"), s.ch_active ? "ON" : "OFF");
-    if (!isnan(s.flow_temp))
-      publish(otgwValue("boilertemperature"), f2(s.flow_temp));
-    if (!isnan(s.return_temp))
-      publish(otgwValue("returnwatertemperature"), f2(s.return_temp));
-    if (!isnan(s.outdoor_temp))
-      publish(otgwValue("outsidetemperature"), f2(s.outdoor_temp));
-    if (!isnan(s.modulation))
-      publish(otgwValue("relmodlvl"), f2(s.modulation));
-    publish(otgwValue("controlsetpoint"), f2(ot_.flowSetpoint()));
-  }
 }

@@ -246,7 +246,6 @@ void setup() {
     settings.mqtt_user = MQTT_USER;
     settings.mqtt_pass = MQTT_PASS;
     settings.mqtt_prefix = MQTT_PREFIX;
-    settings.otgw_node = OTGW_COMPAT_NODE;
     settings.configured = settings.wifi_ssid.length() > 0;
   }
 #ifdef HCS_TEST_BOOT
@@ -297,7 +296,7 @@ void setup() {
   net.setFailsafeStatePtr(&fs_state);
 
   mqtt.setNodeId(nodeId);
-  mqtt.setDeviceInfo(settings.device_name, net.localIp(), settings.otgw_node);
+  mqtt.setDeviceInfo(settings.device_name, net.localIp());
   mqtt.onOtaUrl(onOtaUrl);
   mqtt.onFailsafeCfg(onFailsafeCfg);
   mqtt.setFailsafeStatePtr(&fs_state);
@@ -360,7 +359,7 @@ void loop() {
     failsafeLoop(false);
   } else if (settings.mqtt_host.length()) {
     // keep IP fresh for discovery
-    mqtt.setDeviceInfo(settings.device_name, net.localIp(), settings.otgw_node);
+    mqtt.setDeviceInfo(settings.device_name, net.localIp());
     mqtt.loop();
     failsafeLoop(mqtt.connected());
   } else {

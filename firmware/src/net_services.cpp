@@ -68,8 +68,6 @@ bool NetServices::beginWifi(HcsSettings& settings) {
                                    settings.mqtt_pass.c_str(), 32);
   WiFiManagerParameter p_prefix("mqtt_prefix", "MQTT prefix",
                                 settings.mqtt_prefix.c_str(), 16);
-  WiFiManagerParameter p_node("otgw_node", "OTGW compat node id",
-                              settings.otgw_node.c_str(), 32);
   WiFiManagerParameter p_name("dev_name", "Device name",
                               settings.device_name.c_str(), 32);
   WiFiManagerParameter p_ota("ota_pass", "OTA password (optional)",
@@ -80,7 +78,6 @@ bool NetServices::beginWifi(HcsSettings& settings) {
   wm.addParameter(&p_mqtt_user);
   wm.addParameter(&p_mqtt_pass);
   wm.addParameter(&p_prefix);
-  wm.addParameter(&p_node);
   wm.addParameter(&p_name);
   wm.addParameter(&p_ota);
 
@@ -116,8 +113,6 @@ bool NetServices::beginWifi(HcsSettings& settings) {
     settings.mqtt_pass = p_mqtt_pass.getValue();
     String pref = hcs_trim(p_prefix.getValue());
     if (pref.length()) settings.mqtt_prefix = pref;
-    String node = hcs_trim(p_node.getValue());
-    if (node.length()) settings.otgw_node = node;
     String nm = hcs_trim(p_name.getValue());
     if (nm.length()) settings.device_name = nm;
     settings.ota_password = p_ota.getValue();

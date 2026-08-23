@@ -37,7 +37,7 @@ class MqttBridge {
   void begin(const char* host, uint16_t port, const char* user, const char* pass);
   void loop();
   void setNodeId(const String& id) { node_id_ = id; }
-  void setDeviceInfo(const String& name, const String& ip, const String& otgwNode);
+  void setDeviceInfo(const String& name, const String& ip);
   const String& nodeId() const { return node_id_; }
 
   void publishTelemetry(const OtSnapshot& s);
