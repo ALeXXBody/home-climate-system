@@ -1,3 +1,4 @@
+#include <string.h>
 #include <math.h>
 #include <initializer_list>
 #include <unity.h>
@@ -5,6 +6,7 @@
 #include "hcs_gateway.h"
 #include "hcs_weather_comp.h"
 #include "hcs_sensor_logic.h"
+#include "hcs_boiler_text.h"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -423,6 +425,63 @@ void test_sensor_freshness_window(void) {
   TEST_ASSERT_FALSE(hcs::ow_reading_fresh(false, 0, 90000));
 }
 
+// ---------- boiler diagnostics text ----------
+void test_boiler_diag_no_data_and_healthy(void) {
+  char txt[160];
+  hcs::BoilerDiag d;  // nothing seen yet
+  TEST_ASSERT_EQUAL_INT(0, hcs::boiler_diag_text(d, txt, sizeof(txt)));
+  TEST_ASSERT_EQUAL_STRING("no data", txt);
+  TEST_ASSERT_EQUAL_STRING("unknown", hcs::boiler_diag_state(d));
+
+  d.valid_asf = true;
+  d.asf = 0;
+  d.valid_oem = true;
+  d.oem = 0;
+  TEST_ASSERT_EQUAL_INT(0, hcs::boiler_diag_text(d, txt, sizeof(txt)));
+  TEST_ASSERT_EQUAL_STRING("no faults", txt);
+  TEST_ASSERT_EQUAL_STRING("ok", hcs::boiler_diag_state(d));
+  TEST_ASSERT_FALSE(hcs::boiler_has_fault(d));
+}
+
+void test_boiler_diag_asf_bits(void) {
+  char txt[160];
+  hcs::BoilerDiag d;
+  d.valid_asf = true;
+  d.asf = 0x04;  // low water pressure
+  TEST_ASSERT_EQUAL_INT(1, hcs::boiler_diag_text(d, txt, sizeof(txt)));
+  TEST_ASSERT_EQUAL_STRING("low water pressure", txt);
+  TEST_ASSERT_EQUAL_STRING("fault", hcs::boiler_diag_state(d));
+
+  d.asf = 0x03;  // service request + lockout
+  TEST_ASSERT_EQUAL_INT(2, hcs::boiler_diag_text(d, txt, sizeof(txt)));
+  TEST_ASSERT_EQUAL_STRING("service request; lockout - reset required", txt);
+}
+
+void test_boiler_diag_oem_code(void) {
+  char txt[160];
+  hcs::BoilerDiag d;
+  d.valid_oem = true;
+  d.oem = 217;
+  TEST_ASSERT_EQUAL_INT(1, hcs::boiler_diag_text(d, txt, sizeof(txt)));
+  TEST_ASSERT_EQUAL_STRING("boiler diagnostic code 217", txt);
+
+  // combined ASF + OEM
+  d.valid_asf = true;
+  d.asf = 0x08;
+  TEST_ASSERT_EQUAL_INT(2, hcs::boiler_diag_text(d, txt, sizeof(txt)));
+  TEST_ASSERT_EQUAL_STRING(
+      "gas or flame fault; boiler diagnostic code 217", txt);
+}
+
+void test_boiler_diag_truncated_buffer_is_safe(void) {
+  char tiny[12];
+  hcs::BoilerDiag d;
+  d.valid_asf = true;
+  d.asf = 0xFF;  // many labels -> must not overflow
+  hcs::boiler_diag_text(d, tiny, sizeof(tiny));
+  TEST_ASSERT_TRUE(strlen(tiny) < sizeof(tiny));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_ch_enable_on_variants);
@@ -468,6 +527,10 @@ int main(void) {
   RUN_TEST(test_ow_role_parse);
   RUN_TEST(test_sensor_override_rules);
   RUN_TEST(test_sensor_freshness_window);
+  RUN_TEST(test_boiler_diag_no_data_and_healthy);
+  RUN_TEST(test_boiler_diag_asf_bits);
+  RUN_TEST(test_boiler_diag_oem_code);
+  RUN_TEST(test_boiler_diag_truncated_buffer_is_safe);
   RUN_TEST(test_gw_override_parse);
   RUN_TEST(test_gw_topics_do_not_shadow_flow_setpoint);
   return UNITY_END();

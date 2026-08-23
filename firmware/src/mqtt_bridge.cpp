@@ -2,6 +2,7 @@
 #include "topics.h"
 #include "config.h"
 #include "hcs_commands.h"
+#include "hcs_boiler_text.h"
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
 #include "ot_gateway.h"
 #endif
@@ -211,6 +212,26 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
       publish(hcsTopic(node_id_, "outdoor_temp"), f2(s.outdoor_temp));
     if (!isnan(s.modulation))
       publish(hcsTopic(node_id_, "modulation"), f2(s.modulation));
+  }
+
+  // Boiler diagnostics -> retained clean text + raw numbers (change-gated)
+  {
+    hcs::BoilerDiag bd;
+    bd.valid_asf = s.valid_asf;
+    bd.valid_oem = s.valid_oem;
+    bd.asf = s.asf_flags;
+    bd.oem = s.oem_diag;
+    char txt[160];
+    hcs::boiler_diag_text(bd, txt, sizeof(txt));
+    static String last_txt, last_state;
+    String state = hcs::boiler_diag_state(bd);
+    String txt_s = String(txt);
+    if (txt_s != last_txt) {
+      publish(hcsTopic(node_id_, "boiler_diag"), txt, true);
+      publish(hcsTopic(node_id_, "boiler_state"), state, true);
+      last_txt = txt_s;
+      last_state = state;
+    }
   }
 
   publish(hcsTopic(node_id_, "cmd_ch"), ot_.chEnable() ? "on" : "off");

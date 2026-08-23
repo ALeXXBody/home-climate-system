@@ -17,7 +17,7 @@ Retained JSON on `hcs/discovery/<node_id>`:
   "node_id": "hcs-aabbccddeeff",
   "name": "Home Climate System",
   "board": "lolin_s2_mini",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "ip": "192.168.x.y",
   "ota_http": "http://192.168.x.y/update",
   "api_status": "http://192.168.x.y/api/status",
@@ -76,6 +76,8 @@ curve config persist in NVS/EEPROM across reboots.
 
 | Topic | Dir | Payload |
 |---|---|---|
+| `…/boiler_diag` | pub | plain-English boiler fault summary (retained; e.g. `low water pressure`) |
+| `…/boiler_state` | pub | `ok` \| `fault` \| `unknown` (retained) |
 | `…/gw/mode` | pub | effective role: `master_only` \| `gateway` (retained) |
 | `…/gw/set_mode` | sub | `auto` \| `gateway` \| `master_only` → saves + reboots |
 | `…/gw/tstat_online` | pub | `ON` / `OFF` (thermostat bus activity) |

@@ -1,6 +1,7 @@
 #include "net_services.h"
 #include "config.h"
 #include "hcs_sensors.h"
+#include "hcs_boiler_text.h"
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
 #include "ot_gateway.h"
 #endif
@@ -177,6 +178,7 @@ a{color:#03a9f4;text-decoration:none}
 <div class=card><h3>Outdoor</h3><div class=v><span id=otemp>&mdash;</span><span class=u> &deg;C</span></div></div>
 <div class=card><h3>Modulation</h3><div class=v><span id=mod>&mdash;</span><span class=u> %</span></div></div>
 <div class=card><h3>Setpoint</h3><div class=v><span id=fsp>&mdash;</span><span class=u> &deg;C</span></div></div>
+<div class=card style="grid-column:1/-1"><h3>Boiler diagnostics</h3><div class=v id=bdiag style="font-size:1rem">&mdash;</div></div>
 </div></section>
 <section id=t-controls>
 <div class=card>
@@ -301,7 +303,10 @@ function paint(s){
  $('cha').textContent=s.ch_active?'YES':'NO';
  $('fault').textContent=s.fault?'FAULT':'OK';$('fault').style.color=s.fault?'#ef5350':'#81c784';
  $('ftemp').textContent=s.flow_temp??'—';$('rtemp').textContent=s.return_temp??'—';
- $('otemp').textContent=s.outdoor_temp??'—';$('mod').textContent=s.modulation??'—';
+  $('otemp').textContent=s.outdoor_temp??'—';$('mod').textContent=s.modulation??'—';
+  const bd=s.boiler_diag;
+  if(bd){$('bdiag').textContent=bd.text;$('bdiag').style.color=
+    bd.state==='fault'?'#ef5350':bd.state==='ok'?'#81c784':'inherit';}
  $('fsp').textContent=s.flow_setpoint;$('cch').textContent=yn(s.ch_enable);
  $('cdhw').textContent=yn(s.dhw_enable);
  $('i_board').textContent=s.board+' · '+s.ip;
@@ -445,6 +450,23 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
            String(hcs_gw_cfg_name(settings_.gw_cfg)) + "\"}";
     }
 #endif
+    // Boiler diagnostics (ASF flags + OEM code -> clean text)
+    {
+      hcs::BoilerDiag bd;
+      bd.valid_asf = s.valid_asf;
+      bd.valid_oem = s.valid_oem;
+      bd.asf = s.asf_flags;
+      bd.oem = s.oem_diag;
+      char txt[160];
+      hcs::boiler_diag_text(bd, txt, sizeof(txt));
+      JsonDocument bdd;
+      bdd["state"] = hcs::boiler_diag_state(bd);
+      bdd["text"] = txt;
+      if (bd.valid_asf) bdd["asf"] = bd.asf;
+      if (bd.valid_oem) bdd["oem"] = bd.oem;
+      j += ",\"boiler_diag\":";
+      serializeJson(bdd, j);
+    }
     if (!isnan(s.flow_temp)) j += ",\"flow_temp\":" + String(s.flow_temp, 1);
     if (!isnan(s.return_temp))
       j += ",\"return_temp\":" + String(s.return_temp, 1);

@@ -67,6 +67,17 @@ unsigned long OtMaster::sendRaw(unsigned long frame) {
       snap_.dhw_active = OpenTherm::isHotWaterActive(resp);
       snap_.flame = OpenTherm::isFlameOn(resp);
     }
+    // Harvest diagnostics from forwarded traffic
+    if (OpenTherm::getMessageType(resp) >= OpenThermMessageType::READ_ACK) {
+      if (OpenTherm::getDataID(resp) == OpenThermMessageID::ASFflags) {
+        snap_.asf_flags = (uint8_t)OpenTherm::getUInt(resp);
+        snap_.valid_asf = true;
+      } else if (OpenTherm::getDataID(resp) ==
+                 OpenThermMessageID::OEMDiagnosticCode) {
+        snap_.oem_diag = (uint16_t)OpenTherm::getUInt(resp);
+        snap_.valid_oem = true;
+      }
+    }
   } else {
     snap_.valid = false;
   }
@@ -97,6 +108,23 @@ void OtMaster::poll() {
   snap_.ch_active = OpenTherm::isCentralHeatingActive(response);
   snap_.dhw_active = OpenTherm::isHotWaterActive(response);
   snap_.flame = OpenTherm::isFlameOn(response);
+
+  // Diagnostics: ASF fault flags (ID 5) + OEM diagnostic code (ID 115)
+  unsigned long r5 = ot_.sendRequest(OpenTherm::buildRequest(
+      OpenThermMessageType::READ_DATA, OpenThermMessageID::ASFflags, 0));
+  if (ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS &&
+      OpenTherm::getDataID(r5) == OpenThermMessageID::ASFflags) {
+    snap_.asf_flags = (uint8_t)OpenTherm::getUInt(r5);
+    snap_.valid_asf = true;
+  }
+  unsigned long r115 = ot_.sendRequest(OpenTherm::buildRequest(
+      OpenThermMessageType::READ_DATA, OpenThermMessageID::OEMDiagnosticCode,
+      0));
+  if (ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS &&
+      OpenTherm::getDataID(r115) == OpenThermMessageID::OEMDiagnosticCode) {
+    snap_.oem_diag = (uint16_t)OpenTherm::getUInt(r115);
+    snap_.valid_oem = true;
+  }
 
   // Outdoor temperature first (MsgID 27) so weather comp can use it this cycle
   unsigned long req = OpenTherm::buildRequest(

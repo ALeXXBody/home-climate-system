@@ -18,6 +18,11 @@ struct OtSnapshot {
   float modulation = NAN;     // %
   float dhw_temp = NAN;
   unsigned long last_ok_ms = 0;
+  // Diagnostics (MsgID 5 ASF flags, MsgID 6 OEM code)
+  bool valid_asf = false;
+  bool valid_oem = false;
+  uint8_t asf_flags = 0;
+  uint16_t oem_diag = 0;
 };
 
 class OtMaster {
