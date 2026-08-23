@@ -8,6 +8,7 @@
 #include "hcs_sensor_logic.h"
 #include "hcs_boiler_text.h"
 #include "hcs_ot_caps.h"
+#include "hcs_failsafe.h"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -528,6 +529,32 @@ void test_ot_fhb_format(void) {
   TEST_ASSERT_TRUE(strlen(tiny) < sizeof(tiny));
 }
 
+// ---------- connection-loss failsafe policy ----------
+void test_fs_states(void) {
+  using hcs::FsState;
+  // link up -> connected regardless
+  TEST_ASSERT_EQUAL_INT((int)FsState::CONNECTED,
+      (int)hcs::fs_evaluate(true, true, 0, 600000));
+  // disabled owner switch -> never failsafe
+  TEST_ASSERT_EQUAL_INT((int)FsState::CONNECTED,
+      (int)hcs::fs_evaluate(false, false, 999999999UL, 600000));
+  // inside grace -> hold
+  TEST_ASSERT_EQUAL_INT((int)FsState::HOLD,
+      (int)hcs::fs_evaluate(true, false, 599999, 600000));
+  // beyond grace -> failsafe
+  TEST_ASSERT_EQUAL_INT((int)FsState::FAILSAFE,
+      (int)hcs::fs_evaluate(true, false, 600000, 600000));
+}
+
+void test_fs_ch_demand(void) {
+  // freeze protection forces heat in failsafe
+  TEST_ASSERT_TRUE(hcs::fs_ch_demand(hcs::FsState::FAILSAFE, false));
+  // otherwise last command passes through
+  TEST_ASSERT_FALSE(hcs::fs_ch_demand(hcs::FsState::CONNECTED, false));
+  TEST_ASSERT_TRUE(hcs::fs_ch_demand(hcs::FsState::HOLD, true));
+  TEST_ASSERT_TRUE(hcs::fs_ch_demand(hcs::FsState::CONNECTED, true));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_ch_enable_on_variants);
@@ -581,6 +608,8 @@ int main(void) {
   RUN_TEST(test_ot_slow_read_round_robin);
   RUN_TEST(test_ot_rbp_dhw_write_flag);
   RUN_TEST(test_ot_fhb_format);
+  RUN_TEST(test_fs_states);
+  RUN_TEST(test_fs_ch_demand);
   RUN_TEST(test_gw_override_parse);
   RUN_TEST(test_gw_topics_do_not_shadow_flow_setpoint);
   return UNITY_END();

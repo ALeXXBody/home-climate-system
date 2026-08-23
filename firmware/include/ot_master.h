@@ -74,6 +74,13 @@ class OtMaster {
   void setDhwSetpoint(float c) { dhw_setpoint_ = c; }
   float dhwSetpoint() const { return dhw_setpoint_; }
 
+  /**
+   * Failsafe mode: bypass weather compensation so the manual flow setpoint
+   * (owner's connection-loss value) is used verbatim.
+   */
+  void setFailsafeHeat(bool on) { failsafe_ = on; }
+  bool failsafeHeat() const { return failsafe_; }
+
   /** One lightweight read cycle for gateway reference mode (bus idle). */
   void referencePoll();
 
@@ -123,6 +130,7 @@ class OtMaster {
   const hcs::TempValue* inj_outdoor_ = nullptr;
   const hcs::TempValue* inj_return_ = nullptr;
   float dhw_setpoint_ = NAN;   // NAN = thermostat controls DHW
+  bool failsafe_ = false;
   uint32_t slow_cycle_ = 0;
 
   void applyInject_() {

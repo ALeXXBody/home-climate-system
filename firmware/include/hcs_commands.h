@@ -32,6 +32,7 @@ enum HcsCommand {
   HCS_CMD_DHW_ENABLE,
   HCS_CMD_FLOW_SETPOINT,
   HCS_CMD_DHW_SETPOINT,
+  HCS_CMD_FAILSAFE_CFG,
   HCS_CMD_MAX_MODULATION,
   HCS_CMD_WEATHER_COMP,
   HCS_CMD_WEATHER_COMP_CFG,
@@ -122,6 +123,11 @@ inline HcsCommandResult hcs_parse_command(const char* topic, const char* payload
   }
   if (hcs_ends_with(topic, "/ota_url")) {
     r.cmd = HCS_CMD_OTA_URL;
+    return r;
+  }
+  if (hcs_ends_with(topic, "/failsafe_cfg")) {
+    // JSON payload {"enable":b,"flow":n,"grace_min":n} handled by caller
+    r.cmd = HCS_CMD_FAILSAFE_CFG;
     return r;
   }
   if (hcs_ends_with(topic, "/gw/set_mode")) {

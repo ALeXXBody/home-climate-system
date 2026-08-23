@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include "settings_store.h"
 #include "ot_master.h"
+#include "hcs_failsafe.h"
 
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
 namespace hcs {
@@ -38,6 +39,11 @@ class NetServices {
   /** Optional: expose live 1-Wire probes to the Sensors tab. */
   void setSensors(hcs::HcsSensors* s) { sensors_ = s; }
 
+  /** Single source of truth for settings edited without reboot (failsafe). */
+  void setSharedSettings(HcsSettings* s) { shared_ = s; }
+  /** Live failsafe state owned by main loop. */
+  void setFailsafeStatePtr(hcs::FsState* p) { fs_state_ptr_ = p; }
+
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   /** Optional: expose gateway counters in /api/status. */
   void setGateway(hcs::OtGateway* gw) { gw_ = gw; }
@@ -51,6 +57,8 @@ class NetServices {
   bool reboot_pending_ = false;
   unsigned long reboot_at_ms_ = 0;
   hcs::HcsSensors* sensors_ = nullptr;
+  HcsSettings* shared_ = nullptr;
+  hcs::FsState* fs_state_ptr_ = nullptr;
 
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   hcs::OtGateway* gw_ = nullptr;

@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include "hcs_gw_cfg.h"
+#include "hcs_failsafe.h"
 #include "hcs_weather_comp.h"
 
 // Re-export gateway-role names for unqualified use across firmware sources
@@ -11,6 +12,9 @@ using hcs::HCS_GW_AUTO;
 using hcs::HCS_GW_MASTER_ONLY;
 using hcs::HCS_GW_GATEWAY;
 using hcs::hcs_gw_cfg_name;
+using hcs::kFsEnableDefault;
+using hcs::kFsFlowDefaultC;
+using hcs::kFsGraceDefaultMin;
 
 struct HcsSettings {
   String wifi_ssid;
@@ -39,6 +43,11 @@ struct HcsSettings {
   bool ow_enable = false;
   String ow_addr_outdoor = "";
   String ow_addr_return = "";
+
+  // Connection-loss failsafe (see hcs_failsafe.h)
+  bool fs_enable = kFsEnableDefault;
+  float fs_flow_c = kFsFlowDefaultC;
+  uint8_t fs_grace_min = kFsGraceDefaultMin;
 };
 
 class SettingsStore {

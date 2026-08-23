@@ -159,7 +159,7 @@ input[type=range]{padding:0;height:34px}
 footer{text-align:center;color:#666;font-size:.75rem;margin-top:24px}
 a{color:#03a9f4;text-decoration:none}
 </style></head><body>
-<header><h1 id=devname>Home Climate</h1><span class="badge b-off" id=otb>OT ?</span></header>
+<header><h1 id=devname>Home Climate</h1><span class="badge b-off" id=fsb style="display:none">FAILSAFE</span><span class="badge b-off" id=otb>OT ?</span></header>
 <nav>
 <button data-t=status class=act>Status</button>
 <button data-t=controls>Controls</button>
@@ -214,6 +214,18 @@ a{color:#03a9f4;text-decoration:none}
 <div class=row><span style=flex:1><label>Flow max</label><input id=wc_fmax type=number step=1 min=20 max=90></span>
 <span style=flex:1><label>Flow min</label><input id=wc_fmin type=number step=1 min=10 max=80></span></div>
 <button class=a onclick="applyWc()">Apply curve</button>
+</div>
+<div class=card style=margin-top:10px>
+<label>Connection-loss failsafe <b id=fslbl></b></label>
+<div style="color:#999;font-size:.8rem;margin-bottom:6px">If WiFi/MQTT stays
+down longer than the grace period, CH is forced on at the setpoint below so
+the house keeps warm unattended. Weather compensation is bypassed while
+active.</div>
+<div class=row><button class=a onclick="fsCfg(true)">Enable</button>
+<button class=g onclick="fsCfg(false)">Disable</button></div>
+<div class=row><span style=flex:1><label>Flow &deg;C</label><input id=fs_flow type=number step=1 min=20 max=90></span>
+<span style=flex:1><label>Grace min</label><input id=fs_grace type=number step=1 min=1 max=120></span></div>
+<button class=a onclick="applyFs()">Save failsafe values</button>
 </div></section>
 <section id=t-gateway>
 <div id=gw_na class=card style="display:none;color:#999">Gateway not active on this device
@@ -331,7 +343,15 @@ function paint(s){
  if(document.activeElement&&document.activeElement.id!=='isfp'&&document.activeElement.id!=='rsfp'){
    isfp.value=s.flow_setpoint;if(+rsfp.value!==+s.flow_setpoint)rsfp.value=s.flow_setpoint;}
  mm.value=s.max_modulation;mmlbl.textContent=' '+s.max_modulation+'%';
- wclbl.textContent=s.wc_enable?' ON':' OFF';wct.textContent=s.wc_target??'—';
+  wclbl.textContent=s.wc_enable?' ON':' OFF';wct.textContent=s.wc_target??'—';
+  const fs=s.failsafe;
+  if(fs){
+   const f=$('fsb');f.style.display=fs.active?'inline-block':'none';
+   f.className='badge '+(fs.active?'b-on':'b-off');
+   fslbl.textContent=fs.enable?' ARMED':' OFF';
+   if(!['fs_flow','fs_grace'].includes(document.activeElement?.id)){
+    fs_flow.value=fs.flow;fs_grace.value=fs.grace_min;}
+  }
  if(!['wc_ref','wc_design','wc_fmax','wc_fmin'].includes(document.activeElement?.id)){
   wc_ref.value=s.wc_ref;wc_design.value=s.wc_design;wc_fmax.value=s.wc_fmax;wc_fmin.value=s.wc_fmin;}
  const g=s.gw;
@@ -345,6 +365,9 @@ function paint(s){
 }
 function applyWc(){ctl({wc_ref:+wc_ref.value,wc_design:+wc_design.value,
  wc_fmax:+wc_fmax.value,wc_fmin:+wc_fmin.value})}
+function applyFs(){jpost('/api/failsafe',{enable:fslbl.textContent.includes('ARMED'),
+ flow:+fs_flow.value,grace_min:+fs_grace.value}).then(refresh)}
+function fsCfg(on){jpost('/api/failsafe',{enable:on,flow:+fs_flow.value,grace_min:+fs_grace.value}).then(refresh)}
 async function refresh(){try{paint(await jget('/api/status'))}catch(e){$('otb').textContent='API err'}}
 function ctl(b){jpost('/api/control',b).then(refresh)}
 async function loadSensors(){
@@ -513,6 +536,20 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
       if (!isnan(ot_.dhwSetpoint()))
         j += ",\"dhw_setpoint\":" + String(ot_.dhwSetpoint(), 1);
     }
+    // Connection-loss failsafe
+    {
+      HcsSettings& cfg = shared_ ? *shared_ : settings_;
+      hcs::FsState st =
+          fs_state_ptr_ ? *fs_state_ptr_ : hcs::FsState::CONNECTED;
+      const char* names[3] = {"connected", "hold", "failsafe"};
+      j += ",\"failsafe\":{\"state\":\"" + String(names[(int)st]) + "\"";
+      j += ",\"active\":" +
+           String(st == hcs::FsState::FAILSAFE ? "true" : "false");
+      j += ",\"enable\":" + String(cfg.fs_enable ? "true" : "false");
+      j += ",\"flow\":" + String(cfg.fs_flow_c, 1);
+      j += ",\"grace_min\":" + String(cfg.fs_grace_min);
+      j += "}";
+    }
     if (!isnan(s.flow_temp)) j += ",\"flow_temp\":" + String(s.flow_temp, 1);
     if (!isnan(s.return_temp))
       j += ",\"return_temp\":" + String(s.return_temp, 1);
@@ -638,6 +675,35 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   });
 
   // ---- 1-Wire sensors -------------------------------------------------
+  // Failsafe configuration (web UI path; MQTT path lands via onFailsafeCfg)
+  server.on("/api/failsafe", HTTP_POST, [this]() {
+    JsonDocument d;
+    DeserializationError e = deserializeJson(d, server.arg("plain"));
+    if (e) {
+      server.send(400, "application/json", "{\"ok\":false,\"error\":\"bad json\"}");
+      return;
+    }
+    HcsSettings& cfg = shared_ ? *shared_ : settings_;
+    if (d["enable"].is<bool>()) cfg.fs_enable = d["enable"].as<bool>();
+    if (d["flow"].is<float>()) {
+      float f = d["flow"].as<float>();
+      cfg.fs_flow_c = f < 20 ? 20 : (f > 90 ? 90 : f);
+    }
+    if (d["grace_min"].is<int>()) {
+      int g = d["grace_min"].as<int>();
+      cfg.fs_grace_min = (uint8_t)constrain(g, 1, 120);
+    }
+    SettingsStore store;
+    store.begin();
+    store.save(cfg);
+    if (fs_state_ptr_ && *fs_state_ptr_ == hcs::FsState::FAILSAFE &&
+        cfg.fs_enable) {
+      ot_.setChEnable(true);
+      ot_.setFlowSetpoint(cfg.fs_flow_c);
+    }
+    server.send(200, "application/json", "{\"ok\":true}");
+  });
+
   server.on("/api/sensors", HTTP_GET, [this]() {
     JsonDocument d;
     d["enabled"] = sensors_ ? sensors_->enabled() : false;
@@ -689,8 +755,7 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     server.send(200, "application/json", j);
   });
 
-  server.on("/api/sensors/config", HTTP_POST, [this]() {
-    JsonDocument d;
+  server.on("/api/sensors/config", HTTP_POST, [this]() {    JsonDocument d;
     DeserializationError e = deserializeJson(d, server.arg("plain"));
     if (e || d["enabled"].is<bool>() == false) {
       server.send(400, "application/json",

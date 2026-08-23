@@ -7,6 +7,7 @@
  */
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 
 #if defined(ESP8266)
 #include <ESP8266WiFi.h>
@@ -38,6 +39,57 @@ static String nodeId;
 static hcs::HcsSensors sensors;
 static hcs::TempValue sens_outdoor, sens_return;
 
+// ---- connection-loss failsafe -------------------------------------------
+static hcs::FsState fs_state = hcs::FsState::CONNECTED;
+static bool fs_prev_ch = false;
+static float fs_prev_flow = NAN;
+
+/** Apply (or undo) the failsafe heat demand. */
+static void applyFailsafe(bool active) {
+  if (active) {
+    fs_prev_ch = ot.chEnable();
+    fs_prev_flow = ot.flowSetpoint();
+    ot.setFailsafeHeat(true);
+    if (settings.fs_enable) {
+      ot.setChEnable(true);
+      ot.setFlowSetpoint(settings.fs_flow_c);
+    }
+    Serial.printf("[fs] FAILSAFE engaged: CH on @ %.1f C\n",
+                  settings.fs_flow_c);
+  } else {
+    ot.setFailsafeHeat(false);
+    if (ot.chEnable() && !fs_prev_ch) ot.setChEnable(fs_prev_ch);
+    if (!isnan(fs_prev_flow)) ot.setFlowSetpoint(fs_prev_flow);
+    Serial.println("[fs] failsafe released - head-end back in control");
+  }
+}
+
+static void failsafeLoop(bool link_up) {
+  static unsigned long lost_since_ms = 0;
+  unsigned long now = millis();
+
+  if (!settings.mqtt_host.length()) return;  // standalone device: n/a
+
+  if (link_up) {
+    lost_since_ms = 0;
+    if (fs_state != hcs::FsState::CONNECTED) {
+      applyFailsafe(false);
+      fs_state = hcs::FsState::CONNECTED;
+    }
+    return;
+  }
+
+  if (lost_since_ms == 0) lost_since_ms = now;
+  unsigned long grace_ms = (unsigned long)settings.fs_grace_min * 60000UL;
+  hcs::FsState st =
+      hcs::fs_evaluate(settings.fs_enable, false, now - lost_since_ms,
+                       grace_ms);
+  if (st != fs_state) {
+    if (st == hcs::FsState::FAILSAFE) applyFailsafe(true);
+    fs_state = st;
+  }
+}
+
 /** Refresh the live sensor readings OtMaster injects into its snapshot. */
 static void syncSensorInject() {
   unsigned long now = millis();
@@ -65,6 +117,34 @@ static void onOtaUrl(const String& url) {
   net.startHttpUpdate(url);
 }
 
+/** Failsafe config from MQTT (HCC) or web UI: apply + persist immediately. */
+static void onFailsafeCfg(const String& json) {
+  JsonDocument d;
+  DeserializationError e = deserializeJson(d, json);
+  if (e) {
+    Serial.printf("[fs] bad cfg payload: %s\n", e.c_str());
+    return;
+  }
+  if (d["enable"].is<bool>()) settings.fs_enable = d["enable"].as<bool>();
+  if (d["flow"].is<float>()) {
+    float f = d["flow"].as<float>();
+    if (f < 20) f = 20;
+    if (f > 90) f = 90;
+    settings.fs_flow_c = f;
+  }
+  if (d["grace_min"].is<int>()) {
+    int g = d["grace_min"].as<int>();
+    settings.fs_grace_min = (uint8_t)constrain(g, 1, 120);
+  }
+  SettingsStore st;
+  st.begin();
+  st.save(settings);
+  if (fs_state == hcs::FsState::FAILSAFE && settings.fs_enable)
+    ot.setFlowSetpoint(settings.fs_flow_c);
+  Serial.printf("[fs] cfg: enable=%d flow=%.1f grace=%u min\n",
+                settings.fs_enable, settings.fs_flow_c, settings.fs_grace_min);
+}
+
 static void applyWcSettings(const HcsSettings& s) {
   ot.setWeatherComp(s.wc_enable);
   char cfg[48];
@@ -73,8 +153,7 @@ static void applyWcSettings(const HcsSettings& s) {
   ot.setWeatherCompCfg(cfg);
 }
 
-/** Persist WC changes made at runtime via MQTT/web (only when they differ). */
-static void syncWcFromDevice() {
+/** Persist WC changes made at runtime via MQTT/web (only when they differ). */static void syncWcFromDevice() {
   static unsigned long last = 0;
   unsigned long now = millis();
   if (now - last < 5000) return;
@@ -196,10 +275,14 @@ void setup() {
   nodeId = makeNodeId();
   net.beginHttp(settings, nodeId);
   net.beginArduinoOta(settings, nodeId);
+  net.setSharedSettings(&settings);
+  net.setFailsafeStatePtr(&fs_state);
 
   mqtt.setNodeId(nodeId);
   mqtt.setDeviceInfo(settings.device_name, net.localIp(), settings.otgw_node);
   mqtt.onOtaUrl(onOtaUrl);
+  mqtt.onFailsafeCfg(onFailsafeCfg);
+  mqtt.setFailsafeStatePtr(&fs_state);
 
   if (settings.mqtt_host.length()) {
     mqtt.begin(settings.mqtt_host.c_str(), settings.mqtt_port,
@@ -256,10 +339,14 @@ void loop() {
       last = millis();
       WiFi.reconnect();
     }
+    failsafeLoop(false);
   } else if (settings.mqtt_host.length()) {
     // keep IP fresh for discovery
     mqtt.setDeviceInfo(settings.device_name, net.localIp(), settings.otgw_node);
     mqtt.loop();
+    failsafeLoop(mqtt.connected());
+  } else {
+    failsafeLoop(true);  // no broker configured = standalone, never failsafe
   }
 #endif
 

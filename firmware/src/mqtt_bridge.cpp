@@ -80,6 +80,7 @@ void MqttBridge::subscribeAll() {
   mqtt_.subscribe(hcsSetTopic(node_id_, "dhw_enable").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "weather_comp").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "weather_comp_cfg").c_str());
+  mqtt_.subscribe(hcsSetTopic(node_id_, "failsafe_cfg").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "ota_url").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "reboot").c_str());
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
@@ -92,6 +93,7 @@ void MqttBridge::subscribeAll() {
   mqtt_.subscribe((base + "chenable").c_str());
   mqtt_.subscribe((base + "ctrlsetpt").c_str());
   mqtt_.subscribe((base + "maxmodulation").c_str());
+  mqtt_.subscribe((base + "failsafe_cfg").c_str());
 
   // Global discovery ping
   mqtt_.subscribe("hcs/discovery/ping");
@@ -158,6 +160,9 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
         gw_override_cb_(r.bool_value ? r.float_value : (float)NAN);
       break;
 #endif
+    case HCS_CMD_FAILSAFE_CFG:
+      if (fs_cfg_cb_) fs_cfg_cb_(payload);
+      break;
     default:
       break;
   }
@@ -241,6 +246,20 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
       publish(hcsTopic(node_id_, "boiler_state"), state, true);
       last_txt = txt_s;
       last_state = state;
+    }
+  }
+
+  // Failsafe live state (retained + OTGW-compat mirror)
+  if (fs_state_ptr_) {
+    static String last_fs;
+    String v =
+        (*fs_state_ptr_ == hcs::FsState::FAILSAFE)
+            ? "ON"
+            : (*fs_state_ptr_ == hcs::FsState::HOLD ? "HOLD" : "OFF");
+    if (v != last_fs) {
+      publish(hcsTopic(node_id_, "failsafe"), v, true);
+      publish(otgwValue("failsafe"), v, true);
+      last_fs = v;
     }
   }
 

@@ -272,10 +272,22 @@ void OtMaster::doPoll_() {
 
   applyInject_();  // 1-Wire probes may override outdoor/return before WC
 
-  // Effective flow target: weather-comp curve when active, else manual
-  wc_target_ = hcs_weather_comp_target(wc_, snap_.outdoor_temp);
-  if (ch_enable_) {
-    ot_.setBoilerTemperature(!isnan(wc_target_) ? wc_target_ : flow_setpoint_);
+  // Effective flow target. Failsafe bypasses weather compensation so the
+  // owner's manual connection-loss setpoint is used verbatim.
+  if (failsafe_) {
+    wc_target_ = NAN;
+  } else {
+    wc_target_ = hcs_weather_comp_target(wc_, snap_.outdoor_temp);
+    if (!isnan(wc_target_)) {
+      // WC active: skip the manual write below, TSet comes from the curve
+      if (ch_enable_) {
+        ot_.setBoilerTemperature(wc_target_);
+      }
+    }
+  }
+  bool wc_used = !isnan(wc_target_) && !failsafe_;
+  if (!wc_used && ch_enable_) {
+    ot_.setBoilerTemperature(flow_setpoint_);
   }
 
   float t = ot_.getBoilerTemperature();

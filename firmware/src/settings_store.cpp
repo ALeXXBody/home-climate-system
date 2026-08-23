@@ -7,10 +7,11 @@ static Preferences prefs;
 #include <EEPROM.h>
 // Simple blob store on ESP8266
 static const int kEepromSize = 1024;
+// v6: + connection-loss failsafe (enable, flow setpoint, grace minutes)
 // v5: + 1-Wire sensor config (enable + two probe addresses)
 // v4: gw_mode byte holds HcsGwCfg (0=auto,1=master_only,2=gateway);
 // v3 blobs carried a bool there and are migrated on load.
-static const uint32_t kMagic = 0x48435335;      // HCS5
+static const uint32_t kMagic = 0x48435336;      // HCS6
 static const uint32_t kMagicV3 = 0x48435333;    // HCS3 (legacy bool gw_mode)
 struct EepromBlob {
   uint32_t magic;
@@ -35,6 +36,10 @@ struct EepromBlob {
   uint8_t ow_enable;
   char ow_addr_outdoor[17];
   char ow_addr_return[17];
+  // v6:
+  uint8_t fs_enable;
+  float fs_flow_c;
+  uint8_t fs_grace_min;
 };
 #endif
 
@@ -68,6 +73,9 @@ bool SettingsStore::load(HcsSettings& out) {
   out.ow_enable = prefs.getBool("ow_en", false);
   out.ow_addr_outdoor = prefs.getString("ow_out", "");
   out.ow_addr_return = prefs.getString("ow_ret", "");
+  out.fs_enable = prefs.getBool("fs_en", kFsEnableDefault);
+  out.fs_flow_c = prefs.getFloat("fs_flow", kFsFlowDefaultC);
+  out.fs_grace_min = prefs.getUChar("fs_grace", kFsGraceDefaultMin);
   if (prefs.isKey("gw_cfg")) {
     uint8_t cfg = prefs.getUChar("gw_cfg", HCS_GW_AUTO);
     out.gw_cfg = (cfg <= HCS_GW_GATEWAY) ? cfg : HCS_GW_AUTO;
@@ -115,6 +123,9 @@ bool SettingsStore::load(HcsSettings& out) {
     out.ow_enable = b.ow_enable != 0;
     out.ow_addr_outdoor = String(b.ow_addr_outdoor);
     out.ow_addr_return = String(b.ow_addr_return);
+    out.fs_enable = b.fs_enable != 0;
+    out.fs_flow_c = b.fs_flow_c;
+    out.fs_grace_min = b.fs_grace_min;
   }
   out.configured = true;
   return out.wifi_ssid.length() > 0;
@@ -138,6 +149,9 @@ bool SettingsStore::save(const HcsSettings& in) {
   prefs.putBool("ow_en", in.ow_enable);
   prefs.putString("ow_out", in.ow_addr_outdoor);
   prefs.putString("ow_ret", in.ow_addr_return);
+  prefs.putBool("fs_en", in.fs_enable);
+  prefs.putFloat("fs_flow", in.fs_flow_c);
+  prefs.putUChar("fs_grace", in.fs_grace_min);
   return true;
 #elif defined(ESP8266)
   EepromBlob b{};
@@ -164,6 +178,9 @@ bool SettingsStore::save(const HcsSettings& in) {
           sizeof(b.ow_addr_outdoor) - 1);
   strncpy(b.ow_addr_return, in.ow_addr_return.c_str(),
           sizeof(b.ow_addr_return) - 1);
+  b.fs_enable = in.fs_enable ? 1 : 0;
+  b.fs_flow_c = in.fs_flow_c;
+  b.fs_grace_min = in.fs_grace_min;
   EEPROM.put(0, b);
   return EEPROM.commit();
 #endif

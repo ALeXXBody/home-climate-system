@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <PubSubClient.h>
 #include "ot_master.h"
+#include "hcs_failsafe.h"
 
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
 namespace hcs {
@@ -39,6 +40,11 @@ class MqttBridge {
   void onGwOverride(void (*cb)(float c)) { gw_override_cb_ = cb; }
 #endif
 
+  /** Failsafe config received (JSON payload passed through for parsing). */
+  void onFailsafeCfg(void (*cb)(const String& json)) { fs_cfg_cb_ = cb; }
+  /** Live failsafe state owned by main loop (for retained publishing). */
+  void setFailsafeStatePtr(hcs::FsState* p) { fs_state_ptr_ = p; }
+
  private:
   PubSubClient mqtt_;
   OtMaster& ot_;
@@ -52,6 +58,8 @@ class MqttBridge {
   unsigned long last_telemetry_ms_ = 0;
   unsigned long last_discovery_ms_ = 0;
   void (*ota_cb_)(const String&) = nullptr;
+  void (*fs_cfg_cb_)(const String&) = nullptr;
+  hcs::FsState* fs_state_ptr_ = nullptr;
 
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   hcs::OtGateway* gw_ = nullptr;
