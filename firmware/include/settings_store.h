@@ -34,6 +34,11 @@ struct HcsSettings {
 
   // Gateway role (meaningful on ESP32 gateway builds only; see HcsGwCfg)
   uint8_t gw_cfg = HCS_GW_AUTO;
+
+  // 1-Wire DS18B20 probes (see hcs_sensor_logic.h); addrs as 16 hex chars
+  bool ow_enable = false;
+  String ow_addr_outdoor = "";
+  String ow_addr_return = "";
 };
 
 class SettingsStore {

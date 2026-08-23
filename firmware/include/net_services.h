@@ -10,6 +10,10 @@ class OtGateway;
 }
 #endif
 
+namespace hcs {
+class HcsSensors;
+}
+
 class NetServices {
  public:
   NetServices(OtMaster& ot);
@@ -31,6 +35,9 @@ class NetServices {
   bool wifiConnected() const;
   String localIp() const;
 
+  /** Optional: expose live 1-Wire probes to the Sensors tab. */
+  void setSensors(hcs::HcsSensors* s) { sensors_ = s; }
+
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   /** Optional: expose gateway counters in /api/status. */
   void setGateway(hcs::OtGateway* gw) { gw_ = gw; }
@@ -43,6 +50,7 @@ class NetServices {
   HcsSettings settings_;
   bool reboot_pending_ = false;
   unsigned long reboot_at_ms_ = 0;
+  hcs::HcsSensors* sensors_ = nullptr;
 
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   hcs::OtGateway* gw_ = nullptr;

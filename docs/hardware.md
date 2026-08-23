@@ -101,6 +101,27 @@ noisy near mains.
 - Firmware boots with **CH off** until MQTT enables it.
 - Never leave CH on with all zone valves closed for long periods.
 
+### E) 1-Wire DS18B20 probes (Sensors tab)
+
+One GPIO runs the whole 1-Wire bus — many probes share the same pair.
+Wire every probe: `VCC → 3.3 V`, `GND → GND`, `DATA → board pin`, plus a
+**4.7 kΩ resistor between DATA and 3.3 V** (one per bus, anywhere).
+
+Default pin per env (`-DHCS_ONEWIRE_PIN`, change in `platformio.ini`):
+
+| Env | 1-Wire pin | OT pins in use |
+|---|---|---|
+| `d1_mini` | **GPIO14** (D5) | 4/5 |
+| `lolin_s2_mini(_gw)` | **GPIO15** | 4/5 (+16/17 gw) |
+| `lolin_c3_mini(_gw)` | **GPIO10** | 7/6 (+4/5 gw) |
+| `esp32_d1_mini(_gw)` | **GPIO18** | 21/22 (+26/27 gw) |
+| `esp32s3_zero` | **GPIO1** | 5/6 |
+
+Roles are assigned in the device web UI (**Sensors** tab): an assigned probe
+overrides the boiler's value for that channel while fresh (<90 s), else the
+OpenTherm value passes through. `outdoor` feeds weather compensation;
+`return` backfills return-water telemetry for boilers that don't report it.
+
 ## Library license
 
 OpenTherm bit-level stack: [ihormelnyk/opentherm_library](https://github.com/ihormelnyk/opentherm_library) **MIT** — safe to use with our MIT firmware.  

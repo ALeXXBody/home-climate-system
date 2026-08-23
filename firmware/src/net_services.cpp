@@ -1,5 +1,6 @@
 #include "net_services.h"
 #include "config.h"
+#include "hcs_sensors.h"
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
 #include "ot_gateway.h"
 #endif
@@ -162,6 +163,7 @@ a{color:#03a9f4;text-decoration:none}
 <button data-t=status class=act>Status</button>
 <button data-t=controls>Controls</button>
 <button data-t=gateway>Gateway</button>
+<button data-t=sensors>Sensors</button>
 <button data-t=settings>Settings</button>
 <button data-t=system>System</button>
 </nav>
@@ -230,6 +232,27 @@ a{color:#03a9f4;text-decoration:none}
 </div>
 </div>
 </section>
+<section id=t-sensors>
+<div class=card>
+<label>1-Wire DS18B20 probes (GPIO <b id=sn_pin>&mdash;</b>)</label>
+<div class=row><button class=a onclick="senCfg(true)">Enable</button>
+<button class=g onclick="senCfg(false)">Disable</button>
+<span style="margin-left:auto">now: <b id=sn_en>&mdash;</b></span></div>
+<table><thead><tr><th>Probe address</th><th>Temp</th><th>Role</th></tr></thead>
+<tbody id=sen_rows></tbody></table>
+<div style="color:#999;font-size:.8rem;margin-top:6px">
+Roles: <b>outdoor</b> feeds weather compensation, <b>return</b> backfills the
+return-water reading. An assigned probe overrides the boiler's value for
+that channel while its reading is fresh (&lt;90 s); otherwise the OpenTherm
+value passes through.</div>
+</div>
+<div class=card style=margin-top:10px>
+<label>Effective channels</label>
+<table>
+<tr><td>Outdoor</td><td id=sn_out>&mdash;</td></tr>
+<tr><td>Return</td><td id=sn_ret>&mdash;</td></tr>
+</table>
+</div></section>
 <section id=t-settings>
 <div class=card>
 <label>Device name</label><input id=s_name maxlength=31>
@@ -305,6 +328,30 @@ function applyWc(){ctl({wc_ref:+wc_ref.value,wc_design:+wc_design.value,
  wc_fmax:+wc_fmax.value,wc_fmin:+wc_fmin.value})}
 async function refresh(){try{paint(await jget('/api/status'))}catch(e){$('otb').textContent='API err'}}
 function ctl(b){jpost('/api/control',b).then(refresh)}
+async function loadSensors(){
+ try{const s=await jget('/api/sensors');
+  sn_pin.textContent=s.pin>=0?s.pin:'n/a';
+  sn_en.textContent=yn(s.enabled);
+  const rows=$('sen_rows');rows.innerHTML='';
+  (s.devices||[]).forEach(d=>{
+   const tr=document.createElement('tr');
+   const role=d.addr===s.roles.outdoor?'outdoor':d.addr===s.roles.return?'return':'none';
+   tr.innerHTML=`<td style="font-family:monospace">${d.addr}</td>`+
+    `<td>${d.temp_c!=null?d.temp_c+' °C':'—'}</td>`;
+   const td=document.createElement('td');
+   const sel=document.createElement('select');
+   sel.className='w3-select';sel.style.cssText='padding:4px;background:#1a1a1a;color:#eee;border:1px solid #333';
+   ['none','outdoor','return'].forEach(r=>{const o=document.createElement('option');
+     o.value=r;o.textContent=r;if(r===role)o.selected=true;sel.appendChild(o);});
+   sel.onchange=()=>jpost('/api/sensors/assign',{addr:d.addr,role:sel.value}).then(loadSensors);
+   td.appendChild(sel);tr.appendChild(td);rows.appendChild(tr);
+  });
+  if(!(s.devices||[]).length){rows.innerHTML='<tr><td colspan=3 style="color:#777">No probes found'+(s.pin<0?' — pin not configured for this board':'')+'</td></tr>';}
+  const f=(c)=>c&&c.c!=null?c.c+' °C ('+c.src+')':'—';
+  sn_out.textContent=f(s.effective?.outdoor);sn_ret.textContent=f(s.effective?.return);
+ }catch(e){}
+}
+function senCfg(on){jpost('/api/sensors/config',{enabled:on}).then(loadSensors)}
 function setGwMode(m){if(!confirm('Switch gateway mode to '+m+'?\nDevice will save and reboot.'))return;
  jpost('/api/gw/mode',{mode:m}).then(()=>{const x=$('msg')||document.body;
   alert('Saved. Rebooting…');setTimeout(()=>location.reload(),4000)})}
@@ -314,7 +361,9 @@ function show(t){
  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('act',b.dataset.t===t));
  document.querySelectorAll('section').forEach(s=>s.classList.toggle('act',s.id==='t-'+t));
  if(t==='settings')loadSettings();
+ if(t==='sensors')loadSensors();
 }
+setInterval(()=>{if(document.getElementById('t-sensors').classList.contains('act'))loadSensors();},5000);
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.t));
 async function loadSettings(){
  try{const c=await jget('/api/settings');
@@ -518,6 +567,117 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   server.on("/api/reboot", HTTP_POST, [this]() {
     server.send(200, "application/json", "{\"ok\":true}");
     scheduleReboot();
+  });
+
+  // ---- 1-Wire sensors -------------------------------------------------
+  server.on("/api/sensors", HTTP_GET, [this]() {
+    JsonDocument d;
+    d["enabled"] = sensors_ ? sensors_->enabled() : false;
+    d["pin"] = HCS_ONEWIRE_PIN;
+    size_t n = sensors_ ? sensors_->count() : 0;
+    d["count"] = (int)n;
+    JsonArray arr = d["devices"].to<JsonArray>();
+    unsigned long now = millis();
+    for (size_t i = 0; i < n; i++) {
+      const hcs::OwDevice& dev = sensors_->device(i);
+      JsonObject o = arr.add<JsonObject>();
+      char hex[17];
+      hcs::ow_addr_to_hex(dev.addr, hex);
+      o["addr"] = hex;
+      if (dev.valid && now - dev.ts_ms <= hcs::kOwStaleMs)
+        o["temp_c"] = roundf(dev.celsius * 10) / 10.0f;
+      else
+        o["temp_c"] = nullptr;
+    }
+    JsonObject roles = d["roles"].to<JsonObject>();
+    roles["outdoor"] = sensors_ && sensors_->outdoorAssigned()
+                           ? settings_.ow_addr_outdoor
+                           : String("");
+    roles["return"] = sensors_ && sensors_->returnAssigned()
+                          ? settings_.ow_addr_return
+                          : String("");
+    JsonObject eff = d["effective"].to<JsonObject>();
+    auto chan = [&](const char* key, bool assigned, float snap_c) {
+      hcs::TempValue s = sensors_
+            ? sensors_->roleValue(
+                  strcmp(key, "outdoor") == 0 ? hcs::OW_ROLE_OUTDOOR
+                                              : hcs::OW_ROLE_RETURN,
+                  now)
+            : hcs::TempValue();
+      hcs::TempValue v = hcs::resolve_temp(assigned, s.valid, s.celsius,
+                                           !isnan(snap_c), snap_c);
+      JsonObject c = eff[key].to<JsonObject>();
+      if (v.valid) c["c"] = roundf(v.celsius * 10) / 10.0f; else c["c"] = nullptr;
+      c["src"] = (assigned && s.valid) ? "sensor"
+               : !isnan(snap_c)        ? "opentherm"
+                                       : "none";
+    };
+    chan("outdoor", sensors_ && sensors_->outdoorAssigned(),
+         ot_.snap().outdoor_temp);
+    chan("return", sensors_ && sensors_->returnAssigned(),
+         ot_.snap().return_temp);
+    String j;
+    serializeJson(d, j);
+    server.send(200, "application/json", j);
+  });
+
+  server.on("/api/sensors/config", HTTP_POST, [this]() {
+    JsonDocument d;
+    DeserializationError e = deserializeJson(d, server.arg("plain"));
+    if (e || d["enabled"].is<bool>() == false) {
+      server.send(400, "application/json",
+                  "{\"ok\":false,\"error\":\"enabled:boolean required\"}");
+      return;
+    }
+    settings_.ow_enable = d["enabled"].as<bool>();
+    SettingsStore store;
+    store.begin();
+    store.save(settings_);
+    if (sensors_) {
+      sensors_->configure(settings_.ow_enable,
+                          settings_.ow_addr_outdoor.c_str(),
+                          settings_.ow_addr_return.c_str());
+    }
+    server.send(200, "application/json", "{\"ok\":true}");
+  });
+
+  server.on("/api/sensors/assign", HTTP_POST, [this]() {
+    JsonDocument d;
+    DeserializationError e = deserializeJson(d, server.arg("plain"));
+    const char* addr = e ? "" : (const char*)(d["addr"] | "");
+    const char* role = e ? "" : (const char*)(d["role"] | "");
+    uint8_t raw[8];
+    hcs::OwRole r;
+    if (!hcs::ow_hex_to_addr(addr, raw) ||
+        !hcs::ow_role_from_name(role, &r)) {
+      server.send(400, "application/json",
+                  "{\"ok\":false,\"error\":\"need addr (16 hex chars) and "
+                  "role none|outdoor|return\"}");
+      return;
+    }
+    char hex[17];
+    hcs::ow_addr_to_hex(raw, hex);
+    String s(hex);
+    if (r == hcs::OW_ROLE_OUTDOOR) {
+      settings_.ow_addr_outdoor = s;
+      // a probe can only hold one role
+      if (settings_.ow_addr_return == s) settings_.ow_addr_return = "";
+    } else if (r == hcs::OW_ROLE_RETURN) {
+      settings_.ow_addr_return = s;
+      if (settings_.ow_addr_outdoor == s) settings_.ow_addr_outdoor = "";
+    } else {
+      if (settings_.ow_addr_outdoor == s) settings_.ow_addr_outdoor = "";
+      if (settings_.ow_addr_return == s) settings_.ow_addr_return = "";
+    }
+    SettingsStore store;
+    store.begin();
+    store.save(settings_);
+    if (sensors_) {
+      sensors_->configure(settings_.ow_enable,
+                          settings_.ow_addr_outdoor.c_str(),
+                          settings_.ow_addr_return.c_str());
+    }
+    server.send(200, "application/json", "{\"ok\":true}");
   });
 
 #if defined(ESP32) && defined(HCS_GW_ENABLE)

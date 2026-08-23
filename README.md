@@ -21,7 +21,7 @@ License: **MIT**.
 
 See [docs/hardware.md](docs/hardware.md).
 
-## Firmware status (v0.4.0)
+## Firmware status (v0.5.0)
 
 PlatformIO project under `firmware/`:
 

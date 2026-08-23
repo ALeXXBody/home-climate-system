@@ -26,6 +26,7 @@
 #endif
 #include "ot_gateway.h"
 #endif
+#include "hcs_sensors.h"
 
 static OtMaster ot(OT_IN_PIN, OT_OUT_PIN);
 static WiFiClient wifiClient;
@@ -34,6 +35,19 @@ static NetServices net(ot);
 static SettingsStore store;
 static HcsSettings settings;
 static String nodeId;
+static hcs::HcsSensors sensors;
+static hcs::TempValue sens_outdoor, sens_return;
+
+/** Refresh the live sensor readings OtMaster injects into its snapshot. */
+static void syncSensorInject() {
+  unsigned long now = millis();
+  hcs::TempValue o = sensors.roleValue(hcs::OW_ROLE_OUTDOOR, now);
+  hcs::TempValue r = sensors.roleValue(hcs::OW_ROLE_RETURN, now);
+  // keep values sticky: last good reading stays until it goes stale
+  if (o.valid || !sens_outdoor.valid) sens_outdoor = o;
+  if (r.valid || !sens_return.valid) sens_return = r;
+  ot.setSensorInject(&sens_outdoor, &sens_return);
+}
 
 #ifdef HCS_GW_ENABLE
 static hcs::OtGateway gw(ot, OT2_IN_PIN, OT2_OUT_PIN);
@@ -160,6 +174,10 @@ void setup() {
   Serial.println(F("[dbg] post store"));
 #else
   applyWcSettings(settings);
+  sensors.configure(settings.ow_enable, settings.ow_addr_outdoor.c_str(),
+                    settings.ow_addr_return.c_str());
+  if (HCS_ONEWIRE_PIN >= 0) sensors.begin();
+  net.setSensors(&sensors);
 #endif
 
 #ifdef HCS_TEST_BOOT
@@ -222,6 +240,10 @@ void loop() {
   static unsigned long last_tick = 0;
 #endif
   ot.loop();
+#ifndef HCS_TEST_BOOT
+  sensors.loop();
+  syncSensorInject();
+#endif
 
 #ifndef HCS_TEST_BOOT
   net.loop();
@@ -258,8 +280,9 @@ void loop() {
     }
   } else if (gw_active) {
     gw.loop();  // answers thermostat + forwards to boiler on demand
+    ot.applySensorInject();  // keep telemetry sensor-correct between forwards
   } else {
-    ot.poll();  // autonomous ~1 Hz master cycle
+    ot.poll();  // autonomous ~1 Hz master cycle (injects sensors inside poll)
   }
 #else
   ot.poll();  // autonomous ~1 Hz master cycle (master-only builds)

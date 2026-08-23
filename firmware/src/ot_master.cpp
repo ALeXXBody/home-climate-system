@@ -106,6 +106,8 @@ void OtMaster::poll() {
     snap_.outdoor_temp = OpenTherm::getFloat(resp);
   }
 
+  applyInject_();  // 1-Wire probes may override outdoor/return before WC
+
   // Effective flow target: weather-comp curve when active, else manual
   wc_target_ = hcs_weather_comp_target(wc_, snap_.outdoor_temp);
   if (ch_enable_) {

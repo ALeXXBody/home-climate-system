@@ -4,6 +4,7 @@
 #include "hcs_commands.h"
 #include "hcs_gateway.h"
 #include "hcs_weather_comp.h"
+#include "hcs_sensor_logic.h"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -362,6 +363,66 @@ void test_gw_topics_do_not_shadow_flow_setpoint(void) {
   TEST_ASSERT_EQUAL(HCS_CMD_FLOW_SETPOINT, r.cmd);
 }
 
+// ---------- 1-Wire sensor logic ----------
+void test_ow_addr_hex_roundtrip(void) {
+  uint8_t a[8] = {0x28, 0xFF, 0x64, 0x1E, 0x0B, 0x00, 0x00, 0xAB};
+  char hex[17];
+  hcs::ow_addr_to_hex(a, hex);
+  TEST_ASSERT_EQUAL_STRING("28FF641E0B0000AB", hex);
+  uint8_t b[8];
+  TEST_ASSERT_TRUE(hcs::ow_hex_to_addr(hex, b));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(a, b, 8);
+}
+
+void test_ow_hex_rejects_bad_input(void) {
+  uint8_t out[8];
+  TEST_ASSERT_FALSE(hcs::ow_hex_to_addr(nullptr, out));
+  TEST_ASSERT_FALSE(hcs::ow_hex_to_addr("28FF", out));              // too short
+  TEST_ASSERT_FALSE(hcs::ow_hex_to_addr("28FF641E0B0000ABX", out)); // too long
+  TEST_ASSERT_FALSE(hcs::ow_hex_to_addr("28FF641E0B0000Ag", out));  // bad nibble
+}
+
+void test_ow_role_parse(void) {
+  hcs::OwRole r;
+  TEST_ASSERT_TRUE(hcs::ow_role_from_name("none", &r));
+  TEST_ASSERT_EQUAL_INT(hcs::OW_ROLE_NONE, r);
+  TEST_ASSERT_TRUE(hcs::ow_role_from_name("outdoor", &r));
+  TEST_ASSERT_EQUAL_INT(hcs::OW_ROLE_OUTDOOR, r);
+  TEST_ASSERT_TRUE(hcs::ow_role_from_name("return", &r));
+  TEST_ASSERT_EQUAL_INT(hcs::OW_ROLE_RETURN, r);
+  TEST_ASSERT_TRUE(hcs::ow_role_from_name("OUTDOOR", &r));
+  TEST_ASSERT_EQUAL_INT(hcs::OW_ROLE_OUTDOOR, r);
+  TEST_ASSERT_FALSE(hcs::ow_role_from_name("banana", &r));
+  TEST_ASSERT_FALSE(hcs::ow_role_from_name(nullptr, &r));
+}
+
+void test_sensor_override_rules(void) {
+  // assigned + fresh wins over OpenTherm
+  hcs::TempValue v = hcs::resolve_temp(true, true, 5.5f, true, 3.2f);
+  TEST_ASSERT_TRUE(v.valid);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 5.5f, v.celsius);
+
+  // assigned but stale -> OpenTherm passes through
+  v = hcs::resolve_temp(true, false, 5.5f, true, 3.2f);
+  TEST_ASSERT_TRUE(v.valid);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.2f, v.celsius);
+
+  // not assigned -> OpenTherm
+  v = hcs::resolve_temp(false, true, 5.5f, true, 3.2f);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.2f, v.celsius);
+
+  // nothing anywhere -> invalid (UI shows dash)
+  v = hcs::resolve_temp(true, false, NAN, false, NAN);
+  TEST_ASSERT_FALSE(v.valid);
+}
+
+void test_sensor_freshness_window(void) {
+  TEST_ASSERT_TRUE(hcs::ow_reading_fresh(true, 0, 90000));
+  TEST_ASSERT_TRUE(hcs::ow_reading_fresh(true, 90000, 90000));
+  TEST_ASSERT_FALSE(hcs::ow_reading_fresh(true, 90001, 90000));
+  TEST_ASSERT_FALSE(hcs::ow_reading_fresh(false, 0, 90000));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_ch_enable_on_variants);
@@ -402,6 +463,11 @@ int main(void) {
   RUN_TEST(test_gw_autodetect_master_when_silent);
   RUN_TEST(test_gw_autodetect_gateway_with_two_frames);
   RUN_TEST(test_gw_autodetect_custom_window);
+  RUN_TEST(test_ow_addr_hex_roundtrip);
+  RUN_TEST(test_ow_hex_rejects_bad_input);
+  RUN_TEST(test_ow_role_parse);
+  RUN_TEST(test_sensor_override_rules);
+  RUN_TEST(test_sensor_freshness_window);
   RUN_TEST(test_gw_override_parse);
   RUN_TEST(test_gw_topics_do_not_shadow_flow_setpoint);
   return UNITY_END();

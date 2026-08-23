@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <OpenTherm.h>
 #include "hcs_weather_comp.h"
+#include "hcs_sensor_logic.h"
 
 struct OtSnapshot {
   bool valid = false;
@@ -48,6 +49,19 @@ class OtMaster {
 
   const OtSnapshot& snap() const { return snap_; }
 
+  /**
+   * Register live 1-Wire readings. Assigned+fresh probes override the
+   * OpenTherm-provided outdoor/return values in the snapshot (and thus
+   * weather comp + telemetry). Pass nullptr to clear.
+   */
+  void setSensorInject(const hcs::TempValue* outdoor, const hcs::TempValue* ret) {
+    inj_outdoor_ = outdoor;
+    inj_return_ = ret;
+  }
+
+  /** Re-apply injections to the current snapshot (gateway path). */
+  void applySensorInject() { applyInject_(); }
+
   /** Run one master transaction cycle (status + reads). ~1 Hz. */
   void poll();
 
@@ -71,6 +85,14 @@ class OtMaster {
   float wc_target_ = NAN;
   OtSnapshot snap_;
   unsigned long last_poll_ms_ = 0;
+  const hcs::TempValue* inj_outdoor_ = nullptr;
+  const hcs::TempValue* inj_return_ = nullptr;
+
+  void applyInject_() {
+    if (inj_outdoor_ && inj_outdoor_->valid)
+      snap_.outdoor_temp = inj_outdoor_->celsius;
+    if (inj_return_ && inj_return_->valid) snap_.return_temp = inj_return_->celsius;
+  }
 #ifdef HCS_GW_ENABLE
   bool autopoll_ = true;
 #endif

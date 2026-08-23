@@ -7,9 +7,10 @@ static Preferences prefs;
 #include <EEPROM.h>
 // Simple blob store on ESP8266
 static const int kEepromSize = 1024;
-// v4: gw_mode byte now holds HcsGwCfg (0=auto,1=master_only,2=gateway);
+// v5: + 1-Wire sensor config (enable + two probe addresses)
+// v4: gw_mode byte holds HcsGwCfg (0=auto,1=master_only,2=gateway);
 // v3 blobs carried a bool there and are migrated on load.
-static const uint32_t kMagic = 0x48435334;      // HCS4
+static const uint32_t kMagic = 0x48435335;      // HCS5
 static const uint32_t kMagicV3 = 0x48435333;    // HCS3 (legacy bool gw_mode)
 struct EepromBlob {
   uint32_t magic;
@@ -30,6 +31,10 @@ struct EepromBlob {
   float wc_flow_max;
   float wc_flow_min;
   uint8_t gw_mode;
+  // v5:
+  uint8_t ow_enable;
+  char ow_addr_outdoor[17];
+  char ow_addr_return[17];
 };
 #endif
 
@@ -60,6 +65,9 @@ bool SettingsStore::load(HcsSettings& out) {
   out.wc_t_out_design = prefs.getFloat("wc_dsn", -10.0f);
   out.wc_flow_max = prefs.getFloat("wc_fmax", 65.0f);
   out.wc_flow_min = prefs.getFloat("wc_fmin", 25.0f);
+  out.ow_enable = prefs.getBool("ow_en", false);
+  out.ow_addr_outdoor = prefs.getString("ow_out", "");
+  out.ow_addr_return = prefs.getString("ow_ret", "");
   if (prefs.isKey("gw_cfg")) {
     uint8_t cfg = prefs.getUChar("gw_cfg", HCS_GW_AUTO);
     out.gw_cfg = (cfg <= HCS_GW_GATEWAY) ? cfg : HCS_GW_AUTO;
@@ -103,6 +111,11 @@ bool SettingsStore::load(HcsSettings& out) {
   out.wc_t_out_design = b.wc_t_out_design;
   out.wc_flow_max = b.wc_flow_max;
   out.wc_flow_min = b.wc_flow_min;
+  if (b.magic == kMagic) {
+    out.ow_enable = b.ow_enable != 0;
+    out.ow_addr_outdoor = String(b.ow_addr_outdoor);
+    out.ow_addr_return = String(b.ow_addr_return);
+  }
   out.configured = true;
   return out.wifi_ssid.length() > 0;
 #endif
@@ -122,6 +135,9 @@ bool SettingsStore::save(const HcsSettings& in) {
   prefs.putString("dev_name", in.device_name);
   prefs.putString("ota_pass", in.ota_password);
   prefs.putUChar("gw_cfg", in.gw_cfg);
+  prefs.putBool("ow_en", in.ow_enable);
+  prefs.putString("ow_out", in.ow_addr_outdoor);
+  prefs.putString("ow_ret", in.ow_addr_return);
   return true;
 #elif defined(ESP8266)
   EepromBlob b{};
@@ -143,6 +159,11 @@ bool SettingsStore::save(const HcsSettings& in) {
   b.wc_flow_max = in.wc_flow_max;
   b.wc_flow_min = in.wc_flow_min;
   b.gw_mode = (in.gw_cfg <= HCS_GW_GATEWAY) ? in.gw_cfg : HCS_GW_AUTO;
+  b.ow_enable = in.ow_enable ? 1 : 0;
+  strncpy(b.ow_addr_outdoor, in.ow_addr_outdoor.c_str(),
+          sizeof(b.ow_addr_outdoor) - 1);
+  strncpy(b.ow_addr_return, in.ow_addr_return.c_str(),
+          sizeof(b.ow_addr_return) - 1);
   EEPROM.put(0, b);
   return EEPROM.commit();
 #endif
