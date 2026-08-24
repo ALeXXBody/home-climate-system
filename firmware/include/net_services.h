@@ -76,6 +76,14 @@ class NetServices {
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   /** Optional: expose gateway counters in /api/status. */
   void setGateway(hcs::OtGateway* gw) { gw_ = gw; }
+
+  // Power-health telemetry: why the chip last rebooted and how many
+  // unclean boots (brownout/panic/watchdog) happened since the last
+  // clean power-on. Surfaces unstable supply situations in the UI.
+  void setPowerInfo(const String& reset_reason, uint8_t unclean_boots) {
+    reset_reason_ = reset_reason;
+    unclean_boots_ = unclean_boots;
+  }
 #endif
 
  private:
@@ -96,6 +104,8 @@ class NetServices {
   HcsSettings* shared_ = nullptr;
   hcs::FsState* fs_state_ptr_ = nullptr;
   String ap_name_;
+  String reset_reason_ = "unknown";
+  uint8_t unclean_boots_ = 0;
 
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   hcs::OtGateway* gw_ = nullptr;

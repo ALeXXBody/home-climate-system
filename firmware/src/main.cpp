@@ -20,6 +20,10 @@
 #include "mqtt_bridge.h"
 #include "settings_store.h"
 #include "net_services.h"
+#if defined(ESP32)
+#include <esp_system.h>
+#include <Preferences.h>
+#endif
 
 #ifdef HCS_GW_ENABLE
 #if !defined(ESP32)
@@ -239,6 +243,66 @@ void setup() {
   Serial.println(F("=== Home Climate System ==="));
   Serial.printf("FW %s  board %s  OT_IN=%d OT_OUT=%d\n", HCS_FW_VERSION,
                 HCS_BOARD_NAME, OT_IN_PIN, OT_OUT_PIN);
+
+  // ---- Power health: classify this boot and count unclean ones. -------
+  // A supply that browns out under radio load shows up here as a growing
+  // counter with reset_reason "BROWNOUT" — visible in /api/status and MQTT
+  // instead of a board that silently vanishes from the network.
+  String reset_reason;
+  uint8_t unclean_boots = 0;
+  bool clean_boot = true;
+#if defined(ESP32)
+  {
+    int rr = esp_reset_reason();
+    switch (rr) {
+      case ESP_RST_BROWNOUT: reset_reason = "BROWNOUT"; clean_boot = false; break;
+      case ESP_RST_PANIC:    reset_reason = "PANIC";    clean_boot = false; break;
+      case ESP_RST_TASK_WDT: reset_reason = "TASK_WDT"; clean_boot = false; break;
+      case ESP_RST_INT_WDT:  reset_reason = "INT_WDT";  clean_boot = false; break;
+      case ESP_RST_WDT:      reset_reason = "WDT";      clean_boot = false; break;
+      case ESP_RST_POWERON:  reset_reason = "POWERON";  break;
+      case ESP_RST_SW:       reset_reason = "SW_RESET"; break;
+      case ESP_RST_DEEPSLEEP:reset_reason = "DEEPSLEEP";break;
+      default:               reset_reason = "UNKNOWN";  break;
+    }
+  }
+#elif defined(ESP8266)
+  {
+    String r = ESP.getResetReason();
+    if (r == "Power on" || r == "Software/System restart" ||
+        r == "Deep-Sleep Wake") {
+      reset_reason = r;
+    } else {
+      reset_reason = r.length() ? r : String("UNKNOWN");
+      clean_boot = false;
+    }
+  }
+#else
+  reset_reason = "UNKNOWN";
+#endif
+  {
+    // Count consecutive unclean boots in NVS so a brownout loop is a
+    // number you can read, not a mystery.
+#ifdef ESP32
+    Preferences pp;
+    pp.begin("hcs", false);
+    unclean_boots = pp.getUChar("unclean_boots", 0);
+    if (clean_boot) {
+      unclean_boots = 0;
+    } else if (unclean_boots < 250) {
+      unclean_boots += 1;
+    }
+    pp.putUChar("unclean_boots", unclean_boots);
+    pp.end();
+#else
+    // ESP8266: the reset-reason string above already tells the story;
+    // a persistent unclean-boot counter would need an EEPROM byte slot.
+    unclean_boots = clean_boot ? 0 : 1;
+#endif
+    Serial.printf("[power] boot reason: %s · unclean boots: %u\n",
+                  reset_reason.c_str(), unclean_boots);
+  }
+
 
 #if CH_FAILSAFE_OFF_ON_BOOT
   ot.setChEnable(false);

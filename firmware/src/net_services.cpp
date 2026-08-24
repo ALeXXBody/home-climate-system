@@ -85,6 +85,11 @@ bool NetServices::beginWifi(HcsSettings& settings) {
   // Saved STA creds live in WiFiManager's own NVS; optional seed below.
   if (settings.configured && settings.wifi_ssid.length()) {
     WiFi.begin(settings.wifi_ssid.c_str(), settings.wifi_pass.c_str());
+#ifdef HCS_BOARD_LOLIN_C3_MINI
+    // C3 stacked on the DIYLess shield shares a small LDO with the PIC;
+    // cap TX power so radio bursts cannot brown the rail out.
+    WiFi.setTxPower(WIFI_POWER_17dBm);
+#endif
   }
   // Per-device AP name so simultaneous portals never collide
   ap_name_ = String(PORTAL_AP_NAME) + "-" + suffix;
@@ -481,6 +486,8 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     doc["mqtt_port"] = settings_.mqtt_port;
     doc["rssi"] = WiFi.RSSI();
     doc["uptime"] = millis() / 1000UL;
+    doc["reset_reason"] = reset_reason_;
+    doc["unclean_boots"] = unclean_boots_;
     doc["ot_valid"] = s.valid;
     doc["ch_enable"] = ot_.chEnable();
     doc["dhw_enable"] = ot_.dhwEnable();
