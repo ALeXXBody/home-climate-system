@@ -663,38 +663,13 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
 
   server.on("/api/settings", HTTP_POST, [this, authOk]() {
     if (!authOk()) return;
-    JsonDocument d;
-    DeserializationError e = deserializeJson(d, server.arg("plain"));
-    if (e) {
+    if (!applySettingsJson(server.arg("plain"))) {
       server.send(400, "application/json",
                   "{\"ok\":false,\"error\":\"bad json\"}");
       return;
     }
-    const char* v;
-    if ((v = d["device_name"] | (const char*)nullptr))
-      settings_.device_name = hcs_trim(v).substring(0, 31);
-    if ((v = d["mqtt_host"] | (const char*)nullptr))
-      settings_.mqtt_host = hcs_trim(v).substring(0, 63);
-    int p = d["mqtt_port"] | -1;
-    if (p > 0 && p < 65536) settings_.mqtt_port = (uint16_t)p;
-    if ((v = d["mqtt_user"] | (const char*)nullptr))
-      settings_.mqtt_user = hcs_trim(v).substring(0, 31);
-    if ((v = d["mqtt_pass"] | (const char*)nullptr))
-      settings_.mqtt_pass = String(v).substring(0, 31);
-    if ((v = d["mqtt_prefix"] | (const char*)nullptr))
-      settings_.mqtt_prefix = hcs_trim(v).substring(0, 15);
-    if ((v = d["otgw_node"] | (const char*)nullptr))
-      settings_.otgw_node = hcs_trim(v).substring(0, 31);
-    if ((v = d["ota_password"] | (const char*)nullptr))
-      settings_.ota_password = String(v).substring(0, 31);
-
-    SettingsStore store;
-    store.begin();
-    store.save(settings_);
-
     server.send(200, "application/json",
                 "{\"ok\":true,\"message\":\"saved, rebooting\"}");
-    scheduleReboot();
   });
 
   server.on("/api/ota", HTTP_POST, [this]() {
@@ -1011,6 +986,66 @@ void NetServices::otaReport(const String& state, int progress,
   j += "}";
   ota_last_report_ms_ = millis();
   ota_report_(j);
+}
+
+String NetServices::settingsSnapshotJson() const {
+  auto esc = [](const String& v) {
+    String o;
+    o.reserve(v.length() + 8);
+    for (unsigned i = 0; i < v.length(); ++i) {
+      char c = v[i];
+      if (c == '"' || c == '\\') o += '\\', o += c;
+      else if (c == '\n') o += "\\n";
+      else if (c == '\r') {}
+      else o += c;
+    }
+    return o;
+  };
+  auto isSet = [](const String& v) { return v.length() > 0; };
+  String j = "{";
+  j += "\"device_name\":\"" + esc(settings_.device_name) + "\",";
+  j += "\"mqtt_host\":\"" + esc(settings_.mqtt_host) + "\",";
+  j += "\"mqtt_port\":" + String(settings_.mqtt_port) + ",";
+  j += "\"mqtt_user\":\"" + esc(settings_.mqtt_user) + "\",";
+  j += "\"mqtt_user_set\":" + String(isSet(settings_.mqtt_user) ? "true" : "false") + ",";
+  j += "\"mqtt_prefix\":\"" + esc(settings_.mqtt_prefix) + "\",";
+  j += "\"otgw_node\":\"" + esc(settings_.otgw_node) + "\",";
+  j += "\"ota_password_set\":" +
+       String(settings_.ota_password.length() ? "true" : "false");
+  j += "}";
+  return j;
+}
+
+bool NetServices::applySettingsJson(const String& json) {
+  JsonDocument d;
+  if (deserializeJson(d, json)) return false;
+
+  const char* v;
+  if ((v = d["device_name"] | (const char*)nullptr))
+    settings_.device_name = hcs_trim(v).substring(0, 31);
+  if ((v = d["mqtt_host"] | (const char*)nullptr))
+    settings_.mqtt_host = hcs_trim(v).substring(0, 63);
+  int p = d["mqtt_port"] | -1;
+  if (p > 0 && p < 65536) settings_.mqtt_port = (uint16_t)p;
+  if ((v = d["mqtt_user"] | (const char*)nullptr))
+    settings_.mqtt_user = hcs_trim(v).substring(0, 31);
+  if ((v = d["mqtt_pass"] | (const char*)nullptr))
+    settings_.mqtt_pass = String(v).substring(0, 31);
+  if ((v = d["mqtt_prefix"] | (const char*)nullptr))
+    settings_.mqtt_prefix = hcs_trim(v).substring(0, 15);
+  if ((v = d["otgw_node"] | (const char*)nullptr))
+    settings_.otgw_node = hcs_trim(v).substring(0, 31);
+  if ((v = d["ota_password"] | (const char*)nullptr))
+    settings_.ota_password = String(v).substring(0, 31);
+
+  SettingsStore store;
+  store.begin();
+  store.save(settings_);
+
+  // Echo the new state before the reboot pulls the MQTT link down.
+  if (cfg_report_) cfg_report_(settingsSnapshotJson());
+  scheduleReboot(1500);
+  return true;
 }
 
 bool NetServices::startHttpUpdate(const String& url) {

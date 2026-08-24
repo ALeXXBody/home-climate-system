@@ -18,6 +18,7 @@
  *   .../weather_comp_cfg  "<ref>,<design>,<fmax>,<fmin>" (see hcs_weather_comp.h)
  *   .../reboot         payload ignored
  *   .../ota_url        payload ignored here (URL passed through)
+ *   .../settings       partial JSON, same fields as POST /api/settings
  *   .../gw/set_mode    "gateway" | "master_only" (gateway builds only)
  *   .../gw/override_setpoint  float °C | off/auto/release (gateway builds only)
  */
@@ -40,6 +41,7 @@ enum HcsCommand {
   HCS_CMD_OTA_URL,
   HCS_CMD_GW_MODE,
   HCS_CMD_GW_OVERRIDE_SETPOINT,
+  HCS_CMD_SETTINGS,
 };
 
 struct HcsCommandResult {
@@ -123,6 +125,11 @@ inline HcsCommandResult hcs_parse_command(const char* topic, const char* payload
   }
   if (hcs_ends_with(topic, "/ota_url")) {
     r.cmd = HCS_CMD_OTA_URL;
+    return r;
+  }
+  if (hcs_ends_with(topic, "/settings")) {
+    // JSON payload, same shape as POST /api/settings; caller applies.
+    r.cmd = HCS_CMD_SETTINGS;
     return r;
   }
   if (hcs_ends_with(topic, "/failsafe_cfg")) {

@@ -125,6 +125,21 @@ static void onOtaProgress(const String& json) {
   }
 }
 
+/** Retained settings snapshot -> MQTT so HA mirrors board settings. */
+static void publishCfgSnapshot() {
+  if (nodeId.length()) {
+    mqtt.publish("hcs/" + nodeId + "/cfg", net.settingsSnapshotJson(), true);
+  }
+}
+
+static bool cfg_announced = false;
+
+/** Settings pushed over MQTT by HCC: same JSON as POST /api/settings. */
+static void onSettingsJson(const String& json) {
+  Serial.println("[mqtt] settings update received");
+  net.applySettingsJson(json);  // persists + republishes + reboots
+}
+
 /** Failsafe config from MQTT (HCC) or web UI: apply + persist immediately. */
 static void onFailsafeCfg(const String& json) {
   JsonDocument d;
@@ -307,6 +322,10 @@ void setup() {
   mqtt.setNodeId(nodeId);
   mqtt.setDeviceInfo(settings.device_name, net.localIp());
   mqtt.onOtaUrl(onOtaUrl);
+  mqtt.onSettings(onSettingsJson);
+  net.setConfigReporter([](const String& j) { publishCfgSnapshot(); });
+  // ensure the lambda above can reach the retained publisher even before
+  // nodeId-dependent paths run: it calls publishCfgSnapshot directly.
   mqtt.onFailsafeCfg(onFailsafeCfg);
   mqtt.setFailsafeStatePtr(&fs_state);
 
@@ -370,6 +389,16 @@ void loop() {
     // keep IP fresh for discovery
     mqtt.setDeviceInfo(settings.device_name, net.localIp());
     mqtt.loop();
+    // Announce the retained settings snapshot once per broker session so
+    // HA always has fresh board settings (also republished on every change).
+    if (mqtt.connected()) {
+      if (!cfg_announced) {
+        publishCfgSnapshot();
+        cfg_announced = true;
+      }
+    } else {
+      cfg_announced = false;
+    }
     failsafeLoop(mqtt.connected());
   } else {
     failsafeLoop(true);  // no broker configured = standalone, never failsafe

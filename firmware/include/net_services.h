@@ -43,6 +43,25 @@ class NetServices {
     ota_report_ = std::move(fn);
   }
 
+  /**
+   * Reporter invoked with the masked settings snapshot whenever settings
+   * change (portal or MQTT). main.cpp wires it to the retained topic
+   * hcs/<node>/cfg so HA mirrors board settings both ways.
+   */
+  void setConfigReporter(std::function<void(const String& json)> fn) {
+    cfg_report_ = std::move(fn);
+  }
+
+  /** Masked settings JSON — same shape as GET /api/settings. */
+  String settingsSnapshotJson() const;
+
+  /**
+   * Apply a partial settings update (same fields as POST /api/settings),
+   * persist it, publish the new snapshot and schedule a reboot.
+   * Shared by the HTTP endpoint and the MQTT .../set/settings command.
+   */
+  bool applySettingsJson(const String& json);
+
   bool wifiConnected() const;
   String localIp() const;
 
@@ -69,6 +88,7 @@ class NetServices {
   unsigned long ota_last_report_ms_ = 0;
   int ota_last_progress_ = -1;
   std::function<void(const String& json)> ota_report_;
+  std::function<void(const String& json)> cfg_report_;
 
   void otaReport(const String& state, int progress, const String& error);
   unsigned long reboot_at_ms_ = 0;

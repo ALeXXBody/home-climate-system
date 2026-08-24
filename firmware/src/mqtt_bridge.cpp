@@ -117,6 +117,7 @@ void MqttBridge::subscribeAll() {
   mqtt_.subscribe(hcsSetTopic(node_id_, "weather_comp_cfg").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "failsafe_cfg").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "ota_url").c_str());
+  mqtt_.subscribe(hcsSetTopic(node_id_, "settings").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "reboot").c_str());
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   mqtt_.subscribe(hcsSetTopic(node_id_, "gw/set_mode").c_str());
@@ -178,6 +179,9 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
       break;
     case HCS_CMD_OTA_URL:
       if (ota_cb_ && payload.length()) ota_cb_(payload);
+      break;
+    case HCS_CMD_SETTINGS:
+      if (settings_cb_ && payload.length()) settings_cb_(payload);
       break;
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
     case HCS_CMD_GW_MODE:
