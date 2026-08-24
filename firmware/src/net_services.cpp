@@ -456,8 +456,8 @@ async function loadSettings(){
  }catch(e){}
  s_pass.value='';s_otapass.value='';
 }
-async async function otLog(){try{const r=await fetch('/api/otlog');const j=await r.json();$('otlog').textContent=(j.lines||[]).join('\n')||'(empty — waiting for frames)';}catch(e){$('otlog').textContent='error: '+e;}}
-function saveSettings(){
+async function otLog(){try{const r=await fetch('/api/otlog');const j=await r.json();$('otlog').textContent=(j.lines||[]).join('\n')||'(empty — waiting for frames)';}catch(e){$('otlog').textContent='error: '+e;}}
+async function saveSettings(){
  const b={device_name:s_name.value,mqtt_host:s_host.value,mqtt_port:+s_port.value,
  mqtt_user:s_user.value,mqtt_prefix:s_prefix.value||'hcs'};
  if(s_pass.value)b.mqtt_pass=s_pass.value;
