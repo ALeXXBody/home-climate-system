@@ -21,20 +21,37 @@ License: **MIT**.
 
 See [docs/hardware.md](docs/hardware.md).
 
-## Firmware status (v0.9.0)
+## Firmware status (v1.2.2)
 
 PlatformIO project under `firmware/`:
 
-- OpenTherm master via **ihormelnyk/opentherm_library** (MIT)
-- Captive portal (WiFiManager) + NVS settings
-- Device web UI (status / controls / settings) + ElegantOTA + ArduinoOTA
-- WiFi + MQTT (PubSubClient); native **`hcs/`** + **OTGW-compat** for HA
-- CH enable, flow setpoint, max modulation, DHW, reboot, OTA URL
-- Weather compensation: linear heating curve from boiler outdoor sensor
-- CH **off at boot** (failsafe)
-- Targets: `d1_mini`, `lolin_s2_mini`, `lolin_c3_mini`, `esp32_d1_mini`, `esp32s3_zero` (+ `*_gw` gateway builds)
+### Core
 
-Not yet: HA sidebar OTA push end-to-end, slave/gateway mode.
+- OpenTherm master via **ihormelnyk/opentherm_library** (MIT)
+- Weather compensation: linear heating curve from boiler outdoor sensor
+- CH enable, flow setpoint, max modulation, DHW control, reboot
+- CH **off at boot** (failsafe)
+- Captive portal (WiFiManager) + NVS settings; unique hostname and per-device
+  setup AP (`HCS-Setup-XXXX`)
+- Device web UI (status / controls / settings) + ElegantOTA + ArduinoOTA
+- WiFi + MQTT (PubSubClient); native **`hcs/<node>`** topics are the only contract
+
+### Remote management (v1.1 – v1.2 line)
+
+- **OTA progress reporting** over MQTT (v1.1.1)
+- **Auto-detect 1-Wire probes** with custom roles, published as MQTT state (v1.1.0)
+- **Two-way settings sync** over MQTT — HA can read *and* write board settings;
+  retained `ctl` snapshot on connect so the app is instantly up to date (v1.2.0 / v1.2.2)
+- **Scheme-aware OTA client** — plain-HTTP pulls from LAN mirrors work (v1.2.1);
+  OTA can be triggered end-to-end from the HA sidebar app with progress + success detection
+- **DHW setpoint subscription** over MQTT (v1.2.2)
+
+### Targets
+
+`d1_mini`, `lolin_s2_mini`, `lolin_c3_mini`, `esp32_d1_mini`, `esp32s3_zero`
+(+ `*_gw` gateway builds).
+
+Not yet: slave/gateway mode.
 
 ## Quick start
 
