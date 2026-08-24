@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <OpenTherm.h>
+#include "hcs_ot_log.h"
 #include "hcs_weather_comp.h"
 #include "hcs_sensor_logic.h"
 #include "hcs_ot_caps.h"
@@ -107,6 +108,9 @@ class OtMaster {
   /** Run one master transaction cycle (status + reads). ~1 Hz. */
   void poll();
 
+  // OT console: last master↔boiler exchanges (web UI + /api/otlog).
+  hcs::OtLog ot_log;
+
 #ifdef HCS_GW_ENABLE
   /** Gateway mode: demand-driven raw transaction; updates link health. */
   unsigned long sendRaw(unsigned long frame);
@@ -118,6 +122,7 @@ class OtMaster {
 #endif
 
  private:
+  unsigned long xchg_(unsigned long req);
   OpenTherm ot_;
   bool ch_enable_ = false;
   bool dhw_enable_ = true;

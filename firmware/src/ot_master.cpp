@@ -10,6 +10,14 @@ void OtMaster::begin() {
   ot_.begin();
 }
 
+// Single chokepoint for every bus exchange: records the frame pair in the
+// OT console ring buffer so the web UI can replay the conversation.
+unsigned long OtMaster::xchg_(unsigned long req) {
+  unsigned long resp = ot_.sendRequest(req);
+  ot_log.record(req, resp, ot_.getLastResponseStatus());
+  return resp;
+}
+
 void OtMaster::loop() {
   // ISR-driven process() handles bit timing.
 }
@@ -43,7 +51,7 @@ bool OtMaster::setWeatherCompCfg(const char* csv) {
 
 #ifdef HCS_GW_ENABLE
 unsigned long OtMaster::sendRaw(unsigned long frame) {
-  unsigned long resp = ot_.sendRequest(frame);
+  unsigned long resp = xchg_(frame);
   if (ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS) {
     snap_.valid = true;
     snap_.last_ok_ms = millis();
@@ -107,7 +115,7 @@ void OtMaster::referencePoll() {
   if (now - last_poll_ms_ < OT_STATUS_INTERVAL_MS) return;
   last_poll_ms_ = now;
 
-  unsigned long response = ot_.setBoilerStatus(ch_enable_, false, false);
+  unsigned long response = xchg_(OpenTherm::buildRequest(OpenThermMessageType::WRITE_DATA, OpenThermMessageID::Status, (ch_enable_ ? 0x0100 : 0) | 0x0000));
   if (ot_.getLastResponseStatus() != OpenThermResponseStatus::SUCCESS) {
     snap_.valid = false;
     return;
@@ -120,14 +128,14 @@ void OtMaster::referencePoll() {
   snap_.flame = OpenTherm::isFlameOn(response);
 
   // Diagnostics refresh only (ASF + OEM code)
-  unsigned long r5 = ot_.sendRequest(OpenTherm::buildRequest(
+  unsigned long r5 = xchg_(OpenTherm::buildRequest(
       OpenThermMessageType::READ_DATA, OpenThermMessageID::ASFflags, 0));
   if (ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS &&
       OpenTherm::getDataID(r5) == OpenThermMessageID::ASFflags) {
     snap_.asf_flags = (uint8_t)OpenTherm::getUInt(r5);
     snap_.valid_asf = true;
   }
-  unsigned long r115 = ot_.sendRequest(OpenTherm::buildRequest(
+  unsigned long r115 = xchg_(OpenTherm::buildRequest(
       OpenThermMessageType::READ_DATA, OpenThermMessageID::OEMDiagnosticCode,
       0));
   if (ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS &&
@@ -144,7 +152,7 @@ void OtMaster::referencePoll() {
 void OtMaster::slowRead_() {
   OpenThermMessageID id =
       (OpenThermMessageID)hcs::ot_slow_read_id(slow_cycle_++);
-  unsigned long resp = ot_.sendRequest(
+  unsigned long resp = xchg_(
       OpenTherm::buildRequest(OpenThermMessageType::READ_DATA, id, 0));
   if (ot_.getLastResponseStatus() != OpenThermResponseStatus::SUCCESS ||
       OpenTherm::getDataID(resp) != id)
@@ -204,12 +212,12 @@ void OtMaster::slowRead_() {
  */
 bool OtMaster::indexedRead_(OpenThermMessageID id, uint8_t index,
                             uint16_t& value) {
-  unsigned long w = ot_.sendRequest(OpenTherm::buildRequest(
+  unsigned long w = xchg_(OpenTherm::buildRequest(
       OpenThermMessageType::WRITE_DATA, id, index & 0xFF));
   if (ot_.getLastResponseStatus() != OpenThermResponseStatus::SUCCESS)
     return false;
   (void)w;
-  unsigned long r = ot_.sendRequest(OpenTherm::buildRequest(
+  unsigned long r = xchg_(OpenTherm::buildRequest(
       OpenThermMessageType::READ_DATA, id, index & 0xFF));
   if (ot_.getLastResponseStatus() != OpenThermResponseStatus::SUCCESS ||
       OpenTherm::getDataID(r) != id)
@@ -238,7 +246,7 @@ void OtMaster::doPoll_() {
   }
   last_poll_ms_ = now;
 
-  unsigned long response = ot_.setBoilerStatus(ch_enable_, dhw_enable_, false);
+  unsigned long response = xchg_(OpenTherm::buildRequest(OpenThermMessageType::WRITE_DATA, OpenThermMessageID::Status, (ch_enable_ ? 0x0100 : 0) | (dhw_enable_ ? 0x0200 : 0)));
   OpenThermResponseStatus st = ot_.getLastResponseStatus();
   if (st != OpenThermResponseStatus::SUCCESS) {
     snap_.valid = false;
@@ -253,14 +261,14 @@ void OtMaster::doPoll_() {
   snap_.flame = OpenTherm::isFlameOn(response);
 
   // Diagnostics: ASF fault flags (ID 5) + OEM diagnostic code (ID 115)
-  unsigned long r5 = ot_.sendRequest(OpenTherm::buildRequest(
+  unsigned long r5 = xchg_(OpenTherm::buildRequest(
       OpenThermMessageType::READ_DATA, OpenThermMessageID::ASFflags, 0));
   if (ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS &&
       OpenTherm::getDataID(r5) == OpenThermMessageID::ASFflags) {
     snap_.asf_flags = (uint8_t)OpenTherm::getUInt(r5);
     snap_.valid_asf = true;
   }
-  unsigned long r115 = ot_.sendRequest(OpenTherm::buildRequest(
+  unsigned long r115 = xchg_(OpenTherm::buildRequest(
       OpenThermMessageType::READ_DATA, OpenThermMessageID::OEMDiagnosticCode,
       0));
   if (ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS &&
@@ -272,7 +280,7 @@ void OtMaster::doPoll_() {
   // Outdoor temperature first (MsgID 27) so weather comp can use it this cycle
   unsigned long req = OpenTherm::buildRequest(
       OpenThermMessageType::READ_DATA, OpenThermMessageID::Toutside, 0);
-  unsigned long resp = ot_.sendRequest(req);
+  unsigned long resp = xchg_(req);
   if (ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS) {
     snap_.outdoor_temp = OpenTherm::getFloat(resp);
   }
@@ -315,7 +323,7 @@ void OtMaster::doPoll_() {
   req = OpenTherm::buildRequest(OpenThermMessageType::WRITE_DATA,
                                 OpenThermMessageID::MaxRelModLevelSetting,
                                 (unsigned int)(max_mod_ * 256));
-  ot_.sendRequest(req);
+  xchg_(req);
   (void)mm;
 
   // DHW setpoint as remote parameter (ID 56). Audit F8: was written every
@@ -327,7 +335,7 @@ void OtMaster::doPoll_() {
     unsigned long dhw_req = OpenTherm::buildRequest(
         OpenThermMessageType::WRITE_DATA, OpenThermMessageID::TdhwSet,
         (unsigned int)(c * 256));
-    ot_.sendRequest(dhw_req);
+    xchg_(dhw_req);
     last_dhw_write_ms_ = millis();
   }
 

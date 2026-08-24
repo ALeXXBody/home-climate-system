@@ -316,6 +316,12 @@ publishes a named sensor to Home Assistant. Health is re-checked every poll
 <tr><td>MQTT</td><td id=i_mqtt></td></tr>
 </table></div>
 <div class=card style=margin-top:10px>
+<label>OpenTherm console (last 64 exchanges)</label>
+<button class=a onclick="otLog()">Refresh OT log</button>
+<button onclick="fetch('/api/otlog?clear').then(()=>otLog())">Clear</button>
+<pre id=otlog style="max-height:220px;overflow:auto;background:#111;color:#9f9;padding:8px;font-size:11px;white-space:pre-wrap"></pre>
+</div>
+<div class=card style=margin-top:10px>
 <label>Firmware update over the air</label>
 <a class=a href=/update>ElegantOTA updater</a>
 <label>Flash from URL (.bin)</label>
@@ -450,7 +456,8 @@ async function loadSettings(){
  }catch(e){}
  s_pass.value='';s_otapass.value='';
 }
-async function saveSettings(){
+async async function otLog(){try{const r=await fetch('/api/otlog');const j=await r.json();$('otlog').textContent=(j.lines||[]).join('\n')||'(empty — waiting for frames)';}catch(e){$('otlog').textContent='error: '+e;}}
+function saveSettings(){
  const b={device_name:s_name.value,mqtt_host:s_host.value,mqtt_port:+s_port.value,
  mqtt_user:s_user.value,mqtt_prefix:s_prefix.value||'hcs'};
  if(s_pass.value)b.mqtt_pass=s_pass.value;
@@ -472,6 +479,23 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
 
   server.on("/", HTTP_GET, [this]() {
     server.send_P(200, "text/html", INDEX_HTML);
+  });
+
+  server.on("/api/otlog", HTTP_GET, [this]() {
+    bool clear = server.hasArg("clear");
+    if (clear) ot_.ot_log.clear();
+    JsonDocument doc;
+    JsonArray arr = doc["lines"].to<JsonArray>();
+    char line[112];
+    uint8_t n = ot_.ot_log.count();
+    for (uint8_t i = 0; i < n; i++) {
+      hcs::OtLog::format(*ot_.ot_log.entry(i), line, sizeof(line));
+      arr.add(line);
+    }
+    String out;
+    serializeJson(doc, out);
+    server.sendHeader("Cache-Control", "no-store");
+    server.send(200, "application/json", out);
   });
 
   server.on("/api/status", HTTP_GET, [this]() {
