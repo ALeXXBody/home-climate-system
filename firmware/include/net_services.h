@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <functional>
 #include "settings_store.h"
 #include "ot_master.h"
 #include "hcs_failsafe.h"
@@ -33,6 +34,15 @@ class NetServices {
   /** Trigger HTTP OTA from a firmware URL (HA Firmware tab). */
   bool startHttpUpdate(const String& url);
 
+  /**
+   * Install a reporter invoked with JSON progress payloads during OTA.
+   * main.cpp wires this to MQTT topic hcs/<node>/ota so HA can render a
+   * live progress bar and surface failure reasons.
+   */
+  void setOtaReporter(std::function<void(const String& json)> fn) {
+    ota_report_ = std::move(fn);
+  }
+
   bool wifiConnected() const;
   String localIp() const;
 
@@ -55,6 +65,12 @@ class NetServices {
   String node_id_;
   HcsSettings settings_;
   bool reboot_pending_ = false;
+  bool ota_busy_ = false;
+  unsigned long ota_last_report_ms_ = 0;
+  int ota_last_progress_ = -1;
+  std::function<void(const String& json)> ota_report_;
+
+  void otaReport(const String& state, int progress, const String& error);
   unsigned long reboot_at_ms_ = 0;
   hcs::HcsSensors* sensors_ = nullptr;
   HcsSettings* shared_ = nullptr;

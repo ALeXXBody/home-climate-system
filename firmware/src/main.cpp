@@ -117,6 +117,14 @@ static void onOtaUrl(const String& url) {
   net.startHttpUpdate(url);
 }
 
+/** Live OTA progress -> MQTT (HA Firmware tab progress bar / failures). */
+static void onOtaProgress(const String& json) {
+  if (nodeId.length()) {
+    mqtt.publish("hcs/" + nodeId + "/ota", json, false);
+    Serial.printf("[ota] %s\n", json.c_str());
+  }
+}
+
 /** Failsafe config from MQTT (HCC) or web UI: apply + persist immediately. */
 static void onFailsafeCfg(const String& json) {
   JsonDocument d;
@@ -292,6 +300,7 @@ void setup() {
   nodeId = makeNodeId();
   net.beginHttp(settings, nodeId);
   net.beginArduinoOta(settings, nodeId);
+  net.setOtaReporter(onOtaProgress);
   net.setSharedSettings(&settings);
   net.setFailsafeStatePtr(&fs_state);
 

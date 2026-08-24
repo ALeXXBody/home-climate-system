@@ -997,40 +997,98 @@ void NetServices::loop() {
   ArduinoOTA.handle();
 }
 
+void NetServices::otaReport(const String& state, int progress,
+                            const String& error) {
+  if (!ota_report_) return;
+  String j = "{\"state\":\"" + state + "\"";
+  if (progress >= 0) j += ",\"progress\":" + String(progress);
+  if (error.length()) {
+    String e = error;
+    e.replace("\\", "\\\\");
+    e.replace("\"", "\\\"");
+    j += ",\"error\":\"" + e + "\"";
+  }
+  j += "}";
+  ota_last_report_ms_ = millis();
+  ota_report_(j);
+}
+
 bool NetServices::startHttpUpdate(const String& url) {
+  // Reentrancy guard: MQTT + HTTP fallback can both deliver the command.
+  if (ota_busy_) return false;
+  ota_busy_ = true;
+  ota_last_progress_ = -1;
+
   Serial.printf("[ota] pulling %s\n", url.c_str());
+  otaReport("starting", 0, "");
+
 #if defined(ESP8266)
   WiFiClientSecure client;
   client.setInsecure();  // release assets are md5-verified upstream
   client.setTimeout(12);
-  ESPhttpUpdate.rebootOnUpdate(true);
+  ESPhttpUpdate.rebootOnUpdate(false);  // we publish "done", then reboot
   ESPhttpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  ESPhttpUpdate.onProgress([this](int cur, int total) {
+    if (total <= 0) return;
+    int pct = (int)((long long)cur * 100 / total);
+    unsigned long now = millis();
+    if (pct != ota_last_progress_ &&
+        (pct - ota_last_progress_ >= 4 ||
+         now - ota_last_report_ms_ >= 500 || pct >= 100)) {
+      ota_last_progress_ = pct;
+      otaReport("downloading", pct, "");
+    }
+  });
   t_httpUpdate_return ret = ESPhttpUpdate.update(client, url);
 #elif defined(ESP32)
   WiFiClientSecure client;
   client.setInsecure();
-  httpUpdate.rebootOnUpdate(true);
+  httpUpdate.rebootOnUpdate(false);  // we publish "done", then reboot
   httpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  httpUpdate.onProgress([this](int cur, int total) {
+    if (total <= 0) return;
+    int pct = (int)((long long)cur * 100 / total);
+    unsigned long now = millis();
+    if (pct != ota_last_progress_ &&
+        (pct - ota_last_progress_ >= 4 ||
+         now - ota_last_report_ms_ >= 500 || pct >= 100)) {
+      ota_last_progress_ = pct;
+      otaReport("downloading", pct, "");
+    }
+  });
   t_httpUpdate_return ret = httpUpdate.update(client, url);
 #else
+  ota_busy_ = false;
   return false;
 #endif
+
   switch (ret) {
-    case HTTP_UPDATE_FAILED:
+    case HTTP_UPDATE_FAILED: {
 #if defined(ESP8266)
-      Serial.printf("[ota] fail %s\n", ESPhttpUpdate.getLastErrorString().c_str());
+      String err = ESPhttpUpdate.getLastErrorString();
+      int code = (int)ESPhttpUpdate.getLastError();
 #else
-      Serial.printf("[ota] fail %s\n", httpUpdate.getLastErrorString().c_str());
+      String err = httpUpdate.getLastErrorString();
+      int code = (int)httpUpdate.getLastError();
 #endif
-      return false;
+      Serial.printf("[ota] fail (%d) %s\n", code, err.c_str());
+      String msg = err.length() ? err : "update failed";
+      msg += " (code " + String(code) + ")";
+      otaReport("failed", -1, msg);
+      break;
+    }
     case HTTP_UPDATE_NO_UPDATES:
       Serial.println(F("[ota] no updates"));
-      return false;
+      otaReport("failed", -1, "server sent no update image");
+      break;
     case HTTP_UPDATE_OK:
-      Serial.println(F("[ota] ok"));
-      return true;
+      Serial.println(F("[ota] ok — rebooting"));
+      otaReport("done", 100, "");
+      scheduleReboot(1200);  // let the "done" report drain first
+      break;
   }
-  return false;
+  ota_busy_ = false;
+  return ret == HTTP_UPDATE_OK;
 }
 
 void NetServices::scheduleReboot(unsigned long delayMs) {
