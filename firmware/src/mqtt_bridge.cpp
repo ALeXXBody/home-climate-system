@@ -113,6 +113,7 @@ void MqttBridge::subscribeAll() {
   mqtt_.subscribe(hcsSetTopic(node_id_, "flow_setpoint").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "max_modulation").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "dhw_enable").c_str());
+  mqtt_.subscribe(hcsSetTopic(node_id_, "dhw_setpoint").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "weather_comp").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "weather_comp_cfg").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "failsafe_cfg").c_str());
@@ -211,6 +212,39 @@ static String f2(float v) {
   return String(buf);
 }
 
+void MqttBridge::publishCtl() {
+  // Retained control-state mirror for the HA panel (change-gated).
+  auto f_or_null = [](float v) {
+    return isnan(v) ? String("null") : String(v, 1);
+  };
+  const HcsWeatherComp& wc = ot_.weatherCompCfg();
+  String j = "{";
+  j += "\"ch_enable\":" + String(ot_.chEnable() ? "true" : "false") + ",";
+  j += "\"dhw_enable\":" + String(ot_.dhwEnable() ? "true" : "false") + ",";
+  j += "\"dhw_setpoint\":" + f_or_null(ot_.dhwSetpoint()) + ",";
+  j += "\"flow_setpoint\":" + f_or_null(ot_.flowSetpoint()) + ",";
+  j += "\"max_modulation\":" + String(ot_.maxModulation()) + ",";
+  j += "\"wc_enable\":" + String(ot_.weatherComp() ? "true" : "false") + ",";
+  j += "\"wc_ref\":" + String(wc.t_out_ref, 1) + ",";
+  j += "\"wc_design\":" + String(wc.t_out_design, 1) + ",";
+  j += "\"wc_fmax\":" + String(wc.flow_max, 1) + ",";
+  j += "\"wc_fmin\":" + String(wc.flow_min, 1) + ",";
+  j += "\"wc_target\":" + f_or_null(ot_.wcTarget());
+  if (fs_state_ptr_) {
+    j += ",\"fs_state\":\"" +
+         String(*fs_state_ptr_ == hcs::FsState::FAILSAFE
+                    ? "FAILSAFE"
+                    : *fs_state_ptr_ == hcs::FsState::HOLD ? "HOLD" : "OFF") +
+         "\"";
+  }
+  j += "}";
+  static String last;
+  if (j != last) {
+    last = j;
+    publish(hcsTopic(node_id_, "ctl"), j, true);
+  }
+}
+
 void MqttBridge::publishDiscovery() {
   // Retained discovery JSON for HA Firmware tab
   String j = "{";
@@ -243,6 +277,7 @@ void MqttBridge::publishDiscovery() {
 
 void MqttBridge::publishTelemetry(const OtSnapshot& s) {
   publish(hcsTopic(node_id_, "online"), "online", true);
+  publishCtl();
 
   if (s.valid) {
     publish(hcsTopic(node_id_, "flame"), s.flame ? "ON" : "OFF");

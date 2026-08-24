@@ -45,6 +45,8 @@ class MqttBridge {
   const String& nodeId() const { return node_id_; }
 
   void publishTelemetry(const OtSnapshot& s);
+  /** Retained control-state mirror (hcs/<node>/ctl), change-gated. */
+  void publishCtl();
   void publishDiscovery();
   bool connected() { return mqtt_.connected(); }
 
