@@ -1057,41 +1057,48 @@ bool NetServices::startHttpUpdate(const String& url) {
   Serial.printf("[ota] pulling %s\n", url.c_str());
   otaReport("starting", 0, "");
 
+  auto progress = [this](int cur, int total) {
+    if (total <= 0) return;
+    int pct = (int)((long long)cur * 100 / total);
+    unsigned long now = millis();
+    if (pct != ota_last_progress_ &&
+        (pct - ota_last_progress_ >= 4 ||
+         now - ota_last_report_ms_ >= 500 || pct >= 100)) {
+      ota_last_progress_ = pct;
+      otaReport("downloading", pct, "");
+    }
+  };
+
+  // Scheme-aware client: TLS only for https:// URLs. Plain-LAN mirrors
+  // (and any http:// source) must NOT be spoken TLS to.
+  const bool use_tls = url.startsWith("https");
+  t_httpUpdate_return ret;
 #if defined(ESP8266)
-  WiFiClientSecure client;
-  client.setInsecure();  // release assets are md5-verified upstream
-  client.setTimeout(12);
   ESPhttpUpdate.rebootOnUpdate(false);  // we publish "done", then reboot
   ESPhttpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  ESPhttpUpdate.onProgress([this](int cur, int total) {
-    if (total <= 0) return;
-    int pct = (int)((long long)cur * 100 / total);
-    unsigned long now = millis();
-    if (pct != ota_last_progress_ &&
-        (pct - ota_last_progress_ >= 4 ||
-         now - ota_last_report_ms_ >= 500 || pct >= 100)) {
-      ota_last_progress_ = pct;
-      otaReport("downloading", pct, "");
-    }
-  });
-  t_httpUpdate_return ret = ESPhttpUpdate.update(client, url);
+  ESPhttpUpdate.onProgress(progress);
+  if (use_tls) {
+    WiFiClientSecure client;
+    client.setInsecure();  // release assets are md5-verified upstream
+    client.setTimeout(12);
+    ret = ESPhttpUpdate.update(client, url);
+  } else {
+    WiFiClient client;
+    client.setTimeout(12);
+    ret = ESPhttpUpdate.update(client, url);
+  }
 #elif defined(ESP32)
-  WiFiClientSecure client;
-  client.setInsecure();
-  httpUpdate.rebootOnUpdate(false);  // we publish "done", then reboot
+  httpUpdate.rebootOnUpdate(false);
   httpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  httpUpdate.onProgress([this](int cur, int total) {
-    if (total <= 0) return;
-    int pct = (int)((long long)cur * 100 / total);
-    unsigned long now = millis();
-    if (pct != ota_last_progress_ &&
-        (pct - ota_last_progress_ >= 4 ||
-         now - ota_last_report_ms_ >= 500 || pct >= 100)) {
-      ota_last_progress_ = pct;
-      otaReport("downloading", pct, "");
-    }
-  });
-  t_httpUpdate_return ret = httpUpdate.update(client, url);
+  httpUpdate.onProgress(progress);
+  if (use_tls) {
+    WiFiClientSecure client;
+    client.setInsecure();
+    ret = httpUpdate.update(client, url);
+  } else {
+    WiFiClient client;
+    ret = httpUpdate.update(client, url);
+  }
 #else
   ota_busy_ = false;
   return false;
