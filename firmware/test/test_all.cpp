@@ -18,7 +18,7 @@ static HcsCommandResult parse(const char* topic, const char* payload) {
 }
 
 // ==================== MQTT command parser ====================
-// ---------- ch_enable / chenable ----------
+// ---------- ch_enable ----------
 void test_ch_enable_on_variants(void) {
   const char* payloads[] = {"on", "ON", "On", "1", "true", "TRUE"};
   for (auto p : payloads) {
@@ -37,12 +37,6 @@ void test_ch_enable_off_variants(void) {
   }
 }
 
-void test_otgw_chenable_alias(void) {
-  HcsCommandResult r = parse("OTGW/set/hcs-device/chenable", "on");
-  TEST_ASSERT_EQUAL(HCS_CMD_CH_ENABLE, r.cmd);
-  TEST_ASSERT_TRUE(r.bool_value);
-}
-
 // ---------- dhw_enable ----------
 void test_dhw_enable_roundtrip(void) {
   HcsCommandResult on = parse("hcs/n/set/dhw_enable", "1");
@@ -54,15 +48,12 @@ void test_dhw_enable_roundtrip(void) {
   TEST_ASSERT_FALSE(off.bool_value);
 }
 
-// ---------- flow_setpoint / ctrlsetpt ----------
+// ---------- flow_setpoint ----------
 void test_flow_setpoint_floats(void) {
   HcsCommandResult a = parse("hcs/n/set/flow_setpoint", "42.5");
   TEST_ASSERT_EQUAL(HCS_CMD_FLOW_SETPOINT, a.cmd);
   TEST_ASSERT_FLOAT_WITHIN(0.01, 42.5, a.float_value);
 
-  HcsCommandResult b = parse("OTGW/set/node/ctrlsetpt", "-5");
-  TEST_ASSERT_EQUAL(HCS_CMD_FLOW_SETPOINT, b.cmd);
-  TEST_ASSERT_FLOAT_WITHIN(0.01, -5.0, b.float_value);
 }
 
 void test_flow_setpoint_garbage_is_zero(void) {
@@ -80,8 +71,6 @@ void test_max_modulation_clamped(void) {
   HcsCommandResult lo = parse("hcs/n/set/max_modulation", "-3");
   TEST_ASSERT_EQUAL(0, lo.int_value);
 
-  HcsCommandResult ok = parse("OTGW/set/node/maxmodulation", "77");
-  TEST_ASSERT_EQUAL(77, ok.int_value);
 }
 
 // ---------- reboot / ota_url ----------
@@ -634,7 +623,6 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_ch_enable_on_variants);
   RUN_TEST(test_ch_enable_off_variants);
-  RUN_TEST(test_otgw_chenable_alias);
   RUN_TEST(test_dhw_enable_roundtrip);
   RUN_TEST(test_flow_setpoint_floats);
   RUN_TEST(test_flow_setpoint_garbage_is_zero);

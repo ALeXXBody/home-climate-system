@@ -6,7 +6,6 @@ Shared contract between **firmware** and **Home Climate Control**.
 
 - Node id: `hcs-<mac>` (no colons, lowercase), printed on serial at boot.
 - Native prefix: `hcs` (configurable `MQTT_PREFIX` / portal).
-- OTGW-compat prefix: `OTGW` / node `hcs-device` (configurable `otgw_node`).
 
 ## Discovery (device → broker)
 
@@ -92,29 +91,3 @@ curve config persist in NVS/EEPROM across reboots.
 
 Discovery JSON includes a `gw` block with traffic counters on gateway builds.
 Web UI: Gateway tab (mode switch, live counters, setpoint override).
-
-## OTGW-firmware compatibility
-
-So the existing Home Climate Control **OTGW MQTT** backend works unchanged:
-
-### Telemetry
-
-| Topic | Same as OTGW-firmware |
-|---|---|
-| `OTGW/outsidetemperature` | outdoor °C |
-| `OTGW/boilertemperature` | flow °C |
-| `OTGW/returnwatertemperature` | return °C |
-| `OTGW/relmodlvl` | modulation % |
-| `OTGW/flamestatus` | `ON`/`OFF` |
-| `OTGW/chmodus` | `ON`/`OFF` |
-| `OTGW/controlsetpoint` | commanded flow |
-
-### Commands
-
-| Topic | Payload |
-|---|---|
-| `OTGW/set/<otgw_node>/chenable` | `on`/`off` |
-| `OTGW/set/<otgw_node>/ctrlsetpt` | float °C |
-| `OTGW/set/<otgw_node>/maxmodulation` | 0–100 |
-
-Default `otgw_node` is `hcs-device` (portal / NVS).

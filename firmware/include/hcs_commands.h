@@ -8,12 +8,9 @@
  *
  * Recognised topics (suffix match):
  *   .../ch_enable      ON|OFF|1|0|true|false
- *   .../chenable       alias (OTGW-compat)
  *   .../dhw_enable     ON|OFF|1|0|true|false
  *   .../flow_setpoint  float °C
- *   .../ctrlsetpt      alias (OTGW-compat)
  *   .../max_modulation int 0..100 (clamped)
- *   .../maxmodulation  alias (OTGW-compat)
  *   .../weather_comp   ON|OFF|1|0|true|false
  *   .../weather_comp_cfg  "<ref>,<design>,<fmax>,<fmin>" (see hcs_weather_comp.h)
  *   .../reboot         payload ignored
@@ -81,7 +78,7 @@ inline HcsCommandResult hcs_parse_command(const char* topic, const char* payload
   r.int_value = 0;
   if (!topic || !payload) return r;
 
-  if (hcs_ends_with(topic, "/ch_enable") || hcs_ends_with(topic, "/chenable")) {
+  if (hcs_ends_with(topic, "/ch_enable")) {
     r.cmd = HCS_CMD_CH_ENABLE;
     r.bool_value = hcs_truthy(payload);
     return r;
@@ -91,7 +88,7 @@ inline HcsCommandResult hcs_parse_command(const char* topic, const char* payload
     r.bool_value = hcs_truthy(payload);
     return r;
   }
-  if (hcs_ends_with(topic, "/flow_setpoint") || hcs_ends_with(topic, "/ctrlsetpt")) {
+  if (hcs_ends_with(topic, "/flow_setpoint")) {
     r.cmd = HCS_CMD_FLOW_SETPOINT;
     r.float_value = (float)atof(payload);
     return r;

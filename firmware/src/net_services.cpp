@@ -296,7 +296,6 @@ publishes a named sensor to Home Assistant. Health is re-checked every poll
 <label>MQTT user</label><input id=s_user maxlength=31 autocomplete=off>
 <label>MQTT password</label><input id=s_pass maxlength=31 type=password autocomplete=new-password placeholder=(unchanged)>
 <label>Topic prefix</label><input id=s_prefix maxlength=15 value=hcs>
-<label>OTGW-compat node id</label><input id=s_node maxlength=31 value=hcs-device>
 <label>OTA password (blank = none)</label><input id=s_otapass maxlength=31 type=password autocomplete=new-password placeholder=(unchanged)>
 <button class=a onclick="saveSettings()">Save &amp; reboot</button>
 <div id=msg></div>
@@ -442,13 +441,13 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.
 async function loadSettings(){
  try{const c=await jget('/api/settings');
  s_name.value=c.device_name||'';s_host.value=c.mqtt_host||'';s_port.value=c.mqtt_port||1883;
- s_user.value=c.mqtt_user||'';s_prefix.value=c.mqtt_prefix||'hcs';s_node.value=c.otgw_node||'hcs-device';
+ s_user.value=c.mqtt_user||'';s_prefix.value=c.mqtt_prefix||'hcs';
  }catch(e){}
  s_pass.value='';s_otapass.value='';
 }
 async function saveSettings(){
  const b={device_name:s_name.value,mqtt_host:s_host.value,mqtt_port:+s_port.value,
- mqtt_user:s_user.value,mqtt_prefix:s_prefix.value||'hcs',otgw_node:s_node.value||'hcs-device'};
+ mqtt_user:s_user.value,mqtt_prefix:s_prefix.value||'hcs'};
  if(s_pass.value)b.mqtt_pass=s_pass.value;
  if(s_otapass.value)b.ota_password=s_otapass.value;
  await jpost('/api/settings',b);
@@ -654,7 +653,6 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     j += "\"mqtt_user\":\"" + settings_.mqtt_user + "\",";
     j += "\"mqtt_user_set\":" + String(isSet(settings_.mqtt_user) ? "true" : "false") + ",";
     j += "\"mqtt_prefix\":\"" + settings_.mqtt_prefix + "\",";
-    j += "\"otgw_node\":\"" + settings_.otgw_node + "\",";
     j += "\"ota_password_set\":" +
          String(settings_.ota_password.length() ? "true" : "false");
     j += "}";
@@ -1009,7 +1007,6 @@ String NetServices::settingsSnapshotJson() const {
   j += "\"mqtt_user\":\"" + esc(settings_.mqtt_user) + "\",";
   j += "\"mqtt_user_set\":" + String(isSet(settings_.mqtt_user) ? "true" : "false") + ",";
   j += "\"mqtt_prefix\":\"" + esc(settings_.mqtt_prefix) + "\",";
-  j += "\"otgw_node\":\"" + esc(settings_.otgw_node) + "\",";
   j += "\"ota_password_set\":" +
        String(settings_.ota_password.length() ? "true" : "false");
   j += "}";
@@ -1033,8 +1030,6 @@ bool NetServices::applySettingsJson(const String& json) {
     settings_.mqtt_pass = String(v).substring(0, 31);
   if ((v = d["mqtt_prefix"] | (const char*)nullptr))
     settings_.mqtt_prefix = hcs_trim(v).substring(0, 15);
-  if ((v = d["otgw_node"] | (const char*)nullptr))
-    settings_.otgw_node = hcs_trim(v).substring(0, 31);
   if ((v = d["ota_password"] | (const char*)nullptr))
     settings_.ota_password = String(v).substring(0, 31);
 

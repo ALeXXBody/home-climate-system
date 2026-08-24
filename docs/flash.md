@@ -84,16 +84,6 @@ Replace `hcs-aabbccddeeff` with the node id from serial:
 mosquitto_pub -h <broker> -t 'hcs/hcs-aabbccddeeff/set/ch_enable' -m 'on'
 mosquitto_pub -h <broker> -t 'hcs/hcs-aabbccddeeff/set/flow_setpoint' -m '50.0'
 
-# Or OTGW-compat (Home Climate Control existing backend)
-mosquitto_pub -h <broker> -t 'OTGW/set/hcs-device/chenable' -m 'on'
-mosquitto_pub -h <broker> -t 'OTGW/set/hcs-device/ctrlsetpt' -m '50.0'
-```
-
-Subscribe:
-
-```bash
-mosquitto_sub -h <broker> -t 'hcs/#' -v
-mosquitto_sub -h <broker> -t 'OTGW/#' -v
 ```
 
 ## 5. Gateway mode (gateway builds only)
@@ -122,12 +112,7 @@ Mode is persisted and re-applied at boot; switching always reboots.
 
 ## 6. Home Climate Control
 
-In HA, add **Home Climate Control** with backend **Real OTGW via MQTT**:
 
-- MQTT top topic: `OTGW` (default)
-- Node id: `hcs-device` (or change `OTGW_COMPAT_NODE` in `secrets.h` / `config.h`)
-
-Telemetry subjects match OTGW-firmware names (`boilertemperature`, `flamestatus`, …).
 
 ## Troubleshooting
 

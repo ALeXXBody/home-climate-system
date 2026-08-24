@@ -32,12 +32,11 @@ Editable from three places — all converge on the same saved values:
 
 1. Device web UI → Controls → *Connection-loss failsafe* card
 2. MQTT: publish JSON to `hcs/<node>/set/failsafe_cfg`
-   (or OTGW-compat `OTGW/set/<node>/failsafe_cfg`):
    `{"enable":true,"flow":40,"grace_min":10}`
 3. HCC sidebar panel → Settings → *Connection-loss failsafe* card
    ("Save to device" pushes via MQTT)
 
 Live state is visible everywhere: web badge (`FAILSAFE`),
 `/api/status` → `failsafe{}`, retained MQTT `hcs/<node>/failsafe`
-(`OFF/HOLD/ON`, mirrored to the OTGW-compat prefix), and in HA as the
+(`OFF/HOLD/ON`), and in HA as the
 **Heating failsafe** sensor from Home Climate Control.

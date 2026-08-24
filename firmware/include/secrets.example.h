@@ -13,5 +13,3 @@
 
 // Optional overrides:
 // #define MQTT_PREFIX "hcs"
-// #define OTGW_COMPAT_PREFIX "OTGW"
-// #define OTGW_COMPAT_NODE "hcs-s3zero"

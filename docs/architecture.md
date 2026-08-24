@@ -63,4 +63,4 @@ weather compensation UI parity + optional gateway mode via `*_gw` envs).
 - tzapu WiFiManager — MIT
 - ayushsharma82 ElegantOTA — MIT
 
-No GPL sources (see docs/license-otgw.md).
+No third-party GPL sources are used anywhere in this tree.

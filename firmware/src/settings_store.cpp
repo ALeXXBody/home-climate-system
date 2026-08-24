@@ -34,7 +34,7 @@ struct EepromBlob {
   char mqtt_user[32];
   char mqtt_pass[32];
   char mqtt_prefix[16];
-  char otgw_node[32];
+  char reserved_legacy[32];  // keeps ESP8266 blob layout stable
   char device_name[32];
   char ota_password[32];
   uint8_t configured;
@@ -77,7 +77,6 @@ bool SettingsStore::load(HcsSettings& out) {
   out.mqtt_user = prefs.getString("mqtt_user", "");
   out.mqtt_pass = prefs.getString("mqtt_pass", "");
   out.mqtt_prefix = prefs.getString("mqtt_prefix", "hcs");
-  out.otgw_node = prefs.getString("otgw_node", "hcs-device");
   out.device_name = prefs.getString("dev_name", "Home Climate System");
   out.ota_password = prefs.getString("ota_pass", "");
   out.wc_enable = prefs.getBool("wc_en", false);
@@ -115,7 +114,6 @@ bool SettingsStore::load(HcsSettings& out) {
   out.mqtt_host.trim();
   out.mqtt_user.trim();
   out.mqtt_prefix.trim();
-  out.otgw_node.trim();
   out.fs_enable = prefs.getBool("fs_en", kFsEnableDefault);
   out.fs_flow_c = prefs.getFloat("fs_flow", kFsFlowDefaultC);
   out.fs_grace_min = prefs.getUChar("fs_grace", kFsGraceDefaultMin);
@@ -159,8 +157,6 @@ bool SettingsStore::load(HcsSettings& out) {
   out.mqtt_pass = String(b.mqtt_pass);
   out.mqtt_prefix = String(b.mqtt_prefix);
   if (!out.mqtt_prefix.length()) out.mqtt_prefix = "hcs";
-  out.otgw_node = String(b.otgw_node);
-  if (!out.otgw_node.length()) out.otgw_node = "hcs-device";
   out.device_name = String(b.device_name);
   out.mqtt_host.trim();
   out.ota_password = String(b.ota_password);
@@ -210,7 +206,6 @@ bool SettingsStore::save(const HcsSettings& in) {
   prefs.putString("mqtt_user", in.mqtt_user);
   prefs.putString("mqtt_pass", in.mqtt_pass);
   prefs.putString("mqtt_prefix", in.mqtt_prefix);
-  prefs.putString("otgw_node", in.otgw_node);
   prefs.putString("dev_name", in.device_name);
   prefs.putString("ota_pass", in.ota_password);
   prefs.putUChar("gw_cfg", in.gw_cfg);
@@ -243,7 +238,6 @@ bool SettingsStore::save(const HcsSettings& in) {
   strncpy(b.mqtt_user, in.mqtt_user.c_str(), sizeof(b.mqtt_user) - 1);
   strncpy(b.mqtt_pass, in.mqtt_pass.c_str(), sizeof(b.mqtt_pass) - 1);
   strncpy(b.mqtt_prefix, in.mqtt_prefix.c_str(), sizeof(b.mqtt_prefix) - 1);
-  strncpy(b.otgw_node, in.otgw_node.c_str(), sizeof(b.otgw_node) - 1);
   strncpy(b.device_name, in.device_name.c_str(), sizeof(b.device_name) - 1);
   strncpy(b.ota_password, in.ota_password.c_str(), sizeof(b.ota_password) - 1);
   b.wc_enable = in.wc_enable ? 1 : 0;

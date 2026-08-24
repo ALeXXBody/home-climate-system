@@ -2,7 +2,7 @@
 // Compile-time defaults. Runtime WiFi/MQTT come from captive portal (NVS).
 
 #ifndef HCS_FW_VERSION
-#define HCS_FW_VERSION "1.2.2"
+#define HCS_FW_VERSION "1.3.0"
 #endif
 
 #ifndef HCS_BOARD_NAME
@@ -37,12 +37,6 @@
 #define MQTT_PREFIX "hcs"
 #endif
 
-#ifndef OTGW_COMPAT_PREFIX
-#define OTGW_COMPAT_PREFIX "OTGW"
-#endif
-#ifndef OTGW_COMPAT_NODE
-#define OTGW_COMPAT_NODE "hcs-device"
-#endif
 
 #ifndef OT_IN_PIN
 #define OT_IN_PIN 4

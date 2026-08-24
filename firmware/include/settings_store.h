@@ -25,7 +25,6 @@ struct HcsSettings {
   String mqtt_user;
   String mqtt_pass;
   String mqtt_prefix = "hcs";
-  String otgw_node = "hcs-device";
   String device_name = "Home Climate System";
   String ota_password = "";
   bool configured = false;

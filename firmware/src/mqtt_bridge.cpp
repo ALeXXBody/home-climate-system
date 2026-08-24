@@ -316,7 +316,7 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
     }
   }
 
-  // Failsafe live state (retained + OTGW-compat mirror)
+  // Failsafe live state (retained)
   if (fs_state_ptr_) {
     static String last_fs;
     String v =

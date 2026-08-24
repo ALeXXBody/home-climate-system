@@ -3,7 +3,7 @@
  *
  * - Captive portal (WiFiManager) for WiFi + MQTT
  * - HTTP status + ElegantOTA + ArduinoOTA
- * - MQTT native hcs/ + OTGW-compat for Home Climate Control
+ * - MQTT native hcs/ topics for Home Climate Control
  */
 
 #include <Arduino.h>

@@ -125,4 +125,4 @@ OpenTherm value passes through. `outdoor` feeds weather compensation;
 ## Library license
 
 OpenTherm bit-level stack: [ihormelnyk/opentherm_library](https://github.com/ihormelnyk/opentherm_library) **MIT** — safe to use with our MIT firmware.  
-OTGW-firmware (GPL) is **not** used.
+No third-party gateway firmware is used.

@@ -80,7 +80,6 @@ class MqttBridge {
   String node_id_;
   String device_name_;
   String ip_;
-  String otgw_node_ = "hcs-device";
   String user_;
   String pass_;
   String host_;

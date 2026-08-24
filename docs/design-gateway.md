@@ -3,7 +3,7 @@
 Status: **M1+M2 implemented (passthrough core, ESP32-only builds)** · Target firmware: v0.3.x
 License stance: original work; OpenTherm protocol behaviour follows the
 public spec (v2.2+). Ideas (not code) informed by how gateways generally
-work; see [`license-otgw.md`](license-otgw.md) for why no GPL sources are used.
+work; no third-party GPL sources are used in this tree.
 
 > Implementation status:
 > - `include/hcs_gateway.h` — portable router core, 9 native tests (FORWARD /
@@ -162,7 +162,7 @@ requires reboot (documented; keeps bring-up simple and safe).
 
 Existing `hcs/*` telemetry continues to reflect the **effective** state
 (what the boiler was actually told), so HCC needs no driver change.
-OTGW-compat topics unchanged.
+native `hcs/` topics unchanged.
 
 ### Web UI
 
@@ -190,6 +190,6 @@ badge, live counters, override controls (reusing WC card patterns).
 
 ## 8. Explicit non-goals (v0.3)
 
-- PIC/OTGW hex emulation (never — GPL wall).
+- PIC/hex emulation of legacy gateways (out of scope).
 - Multi-boiler / zone-valve logic.
 - Wireless thermostat pairing tricks.
