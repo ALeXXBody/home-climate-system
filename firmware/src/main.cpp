@@ -100,9 +100,8 @@ static void syncSensorInject() {
   unsigned long now = millis();
   hcs::TempValue o = sensors.roleValue(hcs::OW_ROLE_OUTDOOR, now);
   hcs::TempValue r = sensors.roleValue(hcs::OW_ROLE_RETURN, now);
-  // keep values sticky: last good reading stays until it goes stale
-  if (o.valid || !sens_outdoor.valid) sens_outdoor = o;
-  if (r.valid || !sens_return.valid) sens_return = r;
+  sens_outdoor = o;
+  sens_return = r;
   ot.setSensorInject(&sens_outdoor, &sens_return);
 }
 
@@ -167,8 +166,10 @@ static void onFailsafeCfg(const String& json) {
   SettingsStore st;
   st.begin();
   st.save(settings);
-  if (fs_state == hcs::FsState::FAILSAFE && settings.fs_enable)
+  if (fs_state == hcs::FsState::FAILSAFE && settings.fs_enable) {
+    ot.setChEnable(true);
     ot.setFlowSetpoint(settings.fs_flow_c);
+  }
   Serial.printf("[fs] cfg: enable=%d flow=%.1f grace=%u min\n",
                 settings.fs_enable, settings.fs_flow_c, settings.fs_grace_min);
 }
@@ -305,6 +306,7 @@ void setup() {
     Serial.printf("[power] boot reason: %s · unclean boots: %u\n",
                   reset_reason.c_str(), unclean_boots);
   }
+  net.setPowerInfo(reset_reason, unclean_boots);
   status_led.begin();
 
 

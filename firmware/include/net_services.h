@@ -73,10 +73,6 @@ class NetServices {
   /** Live failsafe state owned by main loop. */
   void setFailsafeStatePtr(hcs::FsState* p) { fs_state_ptr_ = p; }
 
-#if defined(ESP32) && defined(HCS_GW_ENABLE)
-  /** Optional: expose gateway counters in /api/status. */
-  void setGateway(hcs::OtGateway* gw) { gw_ = gw; }
-
   // Power-health telemetry: why the chip last rebooted and how many
   // unclean boots (brownout/panic/watchdog) happened since the last
   // clean power-on. Surfaces unstable supply situations in the UI.
@@ -84,6 +80,10 @@ class NetServices {
     reset_reason_ = reset_reason;
     unclean_boots_ = unclean_boots;
   }
+
+#if defined(ESP32) && defined(HCS_GW_ENABLE)
+  /** Optional: expose gateway counters in /api/status. */
+  void setGateway(hcs::OtGateway* gw) { gw_ = gw; }
 #endif
 
  private:

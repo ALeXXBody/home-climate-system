@@ -526,6 +526,8 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     doc["wc_design"] = ot_.weatherCompCfg().t_out_design;
     doc["wc_fmax"] = ot_.weatherCompCfg().flow_max;
     doc["wc_fmin"] = ot_.weatherCompCfg().flow_min;
+    if (!isnan(ot_.wcTarget()))
+      doc["wc_target"] = roundf(ot_.wcTarget() * 10) / 10.0f;
 
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
     if (gw_) {
@@ -676,14 +678,26 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   });
 
   server.on("/api/settings", HTTP_GET, [this]() {
+    auto esc = [](const String& v) {
+      String o;
+      o.reserve(v.length() + 8);
+      for (unsigned i = 0; i < v.length(); ++i) {
+        char c = v[i];
+        if (c == '"' || c == '\\') o += '\\', o += c;
+        else if (c == '\n') o += "\\n";
+        else if (c == '\r') {}
+        else o += c;
+      }
+      return o;
+    };
     auto isSet = [](const String& v) { return v.length() > 0; };
     String j = "{";
-    j += "\"device_name\":\"" + settings_.device_name + "\",";
-    j += "\"mqtt_host\":\"" + settings_.mqtt_host + "\",";
+    j += "\"device_name\":\"" + esc(settings_.device_name) + "\",";
+    j += "\"mqtt_host\":\"" + esc(settings_.mqtt_host) + "\",";
     j += "\"mqtt_port\":" + String(settings_.mqtt_port) + ",";
-    j += "\"mqtt_user\":\"" + settings_.mqtt_user + "\",";
+    j += "\"mqtt_user\":\"" + esc(settings_.mqtt_user) + "\",";
     j += "\"mqtt_user_set\":" + String(isSet(settings_.mqtt_user) ? "true" : "false") + ",";
-    j += "\"mqtt_prefix\":\"" + settings_.mqtt_prefix + "\",";
+    j += "\"mqtt_prefix\":\"" + esc(settings_.mqtt_prefix) + "\",";
     j += "\"ota_password_set\":" +
          String(settings_.ota_password.length() ? "true" : "false");
     j += "}";
