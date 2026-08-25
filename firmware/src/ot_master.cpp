@@ -251,7 +251,12 @@ void OtMaster::doPoll_() {
   }
   last_poll_ms_ = now;
 
-  unsigned long response = xchg_(OpenTherm::buildRequest(OpenThermMessageType::WRITE_DATA, OpenThermMessageID::Status, (ch_enable_ ? 0x0100 : 0) | (dhw_enable_ ? 0x0200 : 0)));
+  // Status must be READ_DATA per OT spec (boiler replies READ-ACK);
+  // WRITE_DATA gets rejected by boilers → ot_valid never sets (v1.3.2
+  // regression, second occurrence — see referencePoll for the first).
+  unsigned long response = xchg_(OpenTherm::buildRequest(
+      OpenThermMessageType::READ_DATA, OpenThermMessageID::Status,
+      (ch_enable_ ? 0x0100 : 0) | (dhw_enable_ ? 0x0200 : 0)));
   OpenThermResponseStatus st = ot_.getLastResponseStatus();
   if (st != OpenThermResponseStatus::SUCCESS) {
     snap_.valid = false;
