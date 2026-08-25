@@ -121,6 +121,31 @@ Mode is persisted and re-applied at boot; switching always reboots.
 | No WiFi | join `HCS-Setup` / `homeclimate`, 2.4 GHz SSID only |
 | No MQTT | portal MQTT host, broker IP, firewall, user/pass |
 | OT `valid=false` | wiring IN/OUT swapped?, boiler powered, OT cable |
+| Browser `/update` page gone | removed in 1.3.6+ — use ArduinoOTA or POST /api/ota (see §5) |
 | C3 mini RGB LED flickers | normal on stacked shield — GPIO7 carries OT traffic |
 | S2/S3/C3 won't flash | hold BOOT/0 while connecting USB-C |
 | CH never starts | publish `ch_enable=on` — boots failsafe off |
+
+
+## 5. OTA — how updates work (1.3.6+)
+
+Three paths, most- to least-automated:
+
+1. **Home Climate Control pipeline** (recommended): Firmware tab → flash.
+   Device pulls the image itself via `POST /api/ota {"url": ...}` and
+   reports progress on MQTT for the HA watchdog.
+2. **ArduinoOTA** from a dev machine — no browser involved:
+   ```
+   pio run -e lolin_c3_mini -t upload --upload-port 192.168.50.137
+   ```
+   Uses the OTA password if one is configured.
+3. Any HTTP client: `curl -X POST -d '{"url":"http://<host>/fw.bin"}' \
+   http://<board-ip>/api/ota`
+
+### Rollback watchdog
+
+Every remote flash records its target URL in LittleFS. After boot the board
+expects MQTT to connect within ~3 minutes; a healthy boot promotes the image
+to "known-good". If MQTT never comes up, the board automatically re-pulls the
+last known-good image (max 3 attempts), so a bad release can't permanently
+take down an installed board.

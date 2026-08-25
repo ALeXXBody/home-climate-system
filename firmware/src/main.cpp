@@ -386,6 +386,7 @@ void setup() {
   net.beginHttp(settings, nodeId);
   net.beginArduinoOta(settings, nodeId);
   net.setOtaReporter(onOtaProgress);
+  net.setMqttConnectedFn([] { return mqtt.connected(); });
   net.setSharedSettings(&settings);
   net.setFailsafeStatePtr(&fs_state);
 

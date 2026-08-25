@@ -253,7 +253,7 @@ void MqttBridge::publishDiscovery() {
   j += "\"board\":\"" + String(HCS_BOARD_NAME) + "\",";
   j += "\"version\":\"" + String(HCS_FW_VERSION) + "\",";
   j += "\"ip\":\"" + ip_ + "\",";
-  j += "\"ota_http\":\"http://" + ip_ + "/update\",";
+  j += "\"ota_http\":\"http://" + ip_ + "/api/ota\",";
   j += "\"api_status\":\"http://" + ip_ + "/api/status\",";
   j += "\"api_ota\":\"http://" + ip_ + "/api/ota\"";
 #if defined(ESP32) && defined(HCS_GW_ENABLE)

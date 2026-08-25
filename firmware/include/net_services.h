@@ -23,7 +23,8 @@ class NetServices {
   /** Connect WiFi via saved creds or captive portal. Blocks until associated or portal timeout. */
   bool beginWifi(HcsSettings& settings);
 
-  /** Start HTTP status page + ElegantOTA on port 80. Call after WiFi up. */
+  /** Start HTTP status page on port 80. OTA lives at POST /api/ota {"url":...}.
+   *  Manual flashes: ArduinoOTA (pio run -t upload --upload-port <ip>). Call after WiFi up. */
   void beginHttp(const HcsSettings& settings, const String& nodeId);
 
   /** ArduinoOTA (IDE / pio ota). */
@@ -86,8 +87,18 @@ class NetServices {
   void setGateway(hcs::OtGateway* gw) { gw_ = gw; }
 #endif
 
+  /** Wire MQTT liveness probe used by the rollback watchdog. */
+  void setMqttConnectedFn(std::function<bool()> fn) { mqtt_ok_fn_ = std::move(fn); }
+
  private:
   OtMaster& ot_;
+  std::function<bool()> mqtt_ok_fn_;
+  // ---- OTA rollback watchdog state (see otaRollbackTick) ----
+  bool     roll_pending_ = false;
+  uint8_t  roll_attempts_ = 0;
+  String   roll_target_url_;
+  String   roll_good_url_;
+  bool     roll_loaded_ = false;
   bool http_started_ = false;
   String node_id_;
   HcsSettings settings_;
@@ -95,6 +106,11 @@ class NetServices {
   bool ota_busy_ = false;
   unsigned long ota_last_report_ms_ = 0;
   int ota_last_progress_ = -1;
+  void otaRollLoad_();
+  void otaRollSave_();
+  /** Mark a firmware URL as pending-rollback target (called by startHttpUpdate). */
+  void otaMarkTarget(const String& url);
+  void otaRollbackTick();
   std::function<void(const String& json)> ota_report_;
   std::function<void(const String& json)> cfg_report_;
 

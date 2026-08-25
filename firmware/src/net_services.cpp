@@ -9,6 +9,7 @@
 
 #include <WiFiManager.h>
 #include <ArduinoOTA.h>
+#include <LittleFS.h>
 
 #if defined(ESP8266)
 #include <ESP8266WiFi.h>
@@ -22,7 +23,6 @@ static ESP8266WebServer server(HTTP_PORT);
 static WebServer server(HTTP_PORT);
 #endif
 
-#include <ElegantOTA.h>
 #include <ArduinoJson.h>
 
 NetServices::NetServices(OtMaster& ot) : ot_(ot) {}
@@ -323,7 +323,7 @@ publishes a named sensor to Home Assistant. Health is re-checked every poll
 </div>
 <div class=card style=margin-top:10px>
 <label>Firmware update over the air</label>
-<a class=a href=/update>ElegantOTA updater</a>
+
 <label>Flash from URL (.bin)</label>
 <div class=row><input id=ourl placeholder=https://&#46;&#46;&#46;/firmware.bin>
 <button class=a onclick="otaFromUrl()">Flash</button></div>
@@ -977,14 +977,9 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   server.collectHeaders(kCorsHeaders, 1);
 #endif
 
-  ElegantOTA.begin(&server);
-  if (settings.ota_password.length()) {
-    ElegantOTA.setAuth("ota", settings.ota_password.c_str());
-  }
-
   server.begin();
   http_started_ = true;
-  Serial.printf("[http] http://%s/  OTA /update\n",
+  Serial.printf("[http] http://%s/  OTA POST /api/ota\n",
                 WiFi.localIP().toString().c_str());
 }
 
@@ -1003,6 +998,7 @@ void NetServices::beginArduinoOta(const HcsSettings& settings,
 }
 
 void NetServices::loop() {
+  otaRollbackTick();
   if (reboot_pending_ && millis() > reboot_at_ms_) {
     Serial.println(F("[http] rebooting now"));
     delay(50);
@@ -1010,7 +1006,6 @@ void NetServices::loop() {
   }
   if (http_started_) {
     server.handleClient();
-    ElegantOTA.loop();
   }
   ArduinoOTA.handle();
 }
@@ -1095,6 +1090,7 @@ bool NetServices::startHttpUpdate(const String& url) {
   ota_last_progress_ = -1;
 
   Serial.printf("[ota] pulling %s\n", url.c_str());
+  otaMarkTarget(url);
   otaReport("starting", 0, "");
 
   auto progress = [this](int cur, int total) {
@@ -1177,4 +1173,83 @@ void NetServices::scheduleReboot(unsigned long delayMs) {
   reboot_pending_ = true;
   reboot_at_ms_ = millis() + delayMs;
   Serial.printf("[http] reboot scheduled in %lums\n", (unsigned long)delayMs);
+}
+
+
+// ── OTA rollback watchdog ────────────────────────────────────────────────
+// Before every remote flash we persist the target URL. After boot we wait
+// OTA_ROLL_CONFIRM_MS for MQTT to prove the image works; a healthy boot
+// promotes target→known-good. If MQTT never comes up within
+// OTA_ROVERT_MS and we still know a good image, we pull that one back.
+// Attempts are capped so a genuinely broken pair of images can't loop.
+
+static const char* ROLL_PATH = "/otaroll.json";
+constexpr unsigned long OTA_CONFIRM_AFTER_MS = 90000;
+constexpr unsigned long OTA_REVERT_AFTER_MS  = 180000;
+constexpr uint8_t      OTA_MAX_ATTEMPTS      = 3;
+
+void NetServices::otaRollLoad_() {
+  if (roll_loaded_) return;
+  roll_loaded_ = true;
+  File f = LittleFS.open(ROLL_PATH, "r");
+  if (!f) return;
+  JsonDocument d;
+  if (!deserializeJson(d, f)) {
+    roll_target_url_ = d["t"] | "";
+    roll_good_url_   = d["g"] | "";
+    roll_attempts_   = d["a"] | 0;
+    roll_pending_    = roll_target_url_.length() > 0;
+  }
+  f.close();
+}
+
+void NetServices::otaRollSave_() {
+  JsonDocument d;
+  d["t"] = roll_target_url_;
+  d["g"] = roll_good_url_;
+  d["a"] = roll_attempts_;
+  File f = LittleFS.open(ROLL_PATH, "w");
+  if (!f) return;
+  serializeJson(d, f);
+  f.close();
+}
+
+void NetServices::otaMarkTarget(const String& url) {
+  otaRollLoad_();
+  roll_target_url_ = url;
+  roll_pending_    = true;
+  otaRollSave_();
+  Serial.printf("[roll] target marked (attempt %u): %s\n", roll_attempts_ + 1, url.c_str());
+}
+
+void NetServices::otaRollbackTick() {
+  if (!roll_pending_) return;
+  otaRollLoad_();
+  const unsigned long up = millis();
+  const bool mqtt_ok = mqtt_ok_fn_ ? mqtt_ok_fn_() : false;
+
+  if (up >= OTA_CONFIRM_AFTER_MS && mqtt_ok) {
+    Serial.println(F("[roll] image confirmed healthy"));
+    roll_good_url_    = roll_target_url_;
+    roll_target_url_  = "";
+    roll_attempts_    = 0;
+    roll_pending_     = false;
+    otaRollSave_();
+    return;
+  }
+
+  if (up >= OTA_REVERT_AFTER_MS && !mqtt_ok) {
+    if (roll_attempts_ + 1 >= OTA_MAX_ATTEMPTS || roll_good_url_.length() == 0) {
+      Serial.printf("[roll] no safe revert possible (attempts=%u, good=%s) — giving up\n",
+                    roll_attempts_, roll_good_url_.c_str());
+      roll_pending_ = false;
+      otaRollSave_();
+      return;
+    }
+    roll_attempts_++;
+    otaRollSave_();
+    Serial.printf("[roll] reverting to known-good: %s\n", roll_good_url_.c_str());
+    roll_pending_ = false;          // otaMarkTarget will re-mark with prev URL
+    startHttpUpdate(roll_good_url_);
+  }
 }

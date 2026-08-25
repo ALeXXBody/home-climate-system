@@ -72,6 +72,6 @@
 #define WIFI_CONNECT_TIMEOUT_S 45
 #define CONFIG_PORTAL_TIMEOUT_S 300
 
-// HTTP server (status + ElegantOTA)
+// HTTP server (status; OTA via POST /api/ota {"url":...} or ArduinoOTA)
 #define HTTP_PORT 80
 #define OTA_PASSWORD ""  // empty = no password; set in portal later if needed
