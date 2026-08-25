@@ -21,7 +21,7 @@ Pins per env:
 |---|---|---|
 | `lolin_s2_mini_gw` | GPIO4/5 | GPIO16/17 |
 | `esp32_d1_mini_gw` | GPIO21/22 | GPIO26/27 |
-| `lolin_c3_mini_gw` | GPIO7/6 | GPIO4/5 |
+| `lolin_c3_mini_gw` | GPIO8/10 | GPIO4/5 |
 
 Bus topology:
 

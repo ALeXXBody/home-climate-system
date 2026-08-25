@@ -7,7 +7,7 @@
 | **DIYLess Master OpenTherm Shield** | Level-shifts MCU GPIO ↔ boiler OpenTherm bus (master / thermostat side) |
 | **ESP8266 D1 mini** | Stacks on the shield (DIYLESS designed for this) |
 | **LOLIN / Wemos S2 mini** | Same D1-mini layout family; OT pins match ESP8266 (GPIO4/5) |
-| **LOLIN C3 mini v2.1** | Direct fitment — stacks; OT lands on GPIO7 (in) / GPIO6 (out) |
+| **LOLIN C3 mini v2.1** | Direct fitment — stacks; OT lands on GPIO8 (in) / GPIO10 (out) |
 | **ESP32-S3-Zero** | Extra target; does **not** stack — jumper OT_IN / OT_OUT |
 
 The Master shield talks to the **boiler only** (replaces wall thermostat).  
@@ -55,8 +55,8 @@ and jump OT lines:
 
 | Function | ESP32-S3-Zero | Shield |
 |---|---|---|
-| OT receive (in) | **GPIO5** | OT_IN |
-| OT transmit (out) | **GPIO6** | OT_OUT |
+| OT receive (in) | **GPIO8** | OT_IN |
+| OT transmit (out) | **GPIO10** | OT_OUT |
 | GND | GND | GND |
 | 3V3 | 3V3 | 3V3 |
 
@@ -68,13 +68,14 @@ Firmware env: `esp32s3_zero` (`OT_IN=5`, `OT_OUT=6`).
 ### D) LOLIN C3 mini v2.1 (direct fitment — stacks)
 
 The C3 mini is D1-mini footprint and Wemos lists it as shield-compatible.
-Stacked on the DIYLess Master shield, the shield's `OT_IN` pad (D1-mini
-D2 position) lands on C3 **GPIO7**, and `OT_OUT` (D1 position) on **GPIO6**
-(verified against the official C3 mini v2.1.0 pinout). Power from 3V3/GND
-positions; 5V position is VBUS.
+Its right header is TX, RX, IO10, IO8, IO7, IO6, GND, 5V (Wemos C3 mini
+v2.1.0 schematic) — so stacked on the DIYLess Master shield, the shield's
+`OT_IN` pad (D1-mini D2 position) lands on C3 **GPIO8**, and `OT_OUT`
+(D1 position) on **GPIO10** (verified against both Wemos schematics).
+Power pads (5V/GND/3V3) line up as on the ESP8266.
 
-Note: GPIO7 also feeds the onboard WS2812 RGB LED — it will flicker with
-OpenTherm traffic. Harmless; treat it as a free activity indicator.
+Note: GPIO7 (the D3-position pad) drives the onboard WS2812 RGB LED and is
+free for other uses — it is NOT part of the OpenTherm interface.
 
 Gateway build (`lolin_c3_mini_gw`) adds the thermostat-side interface on
 free **GPIO4** (in) / **GPIO5** (out) — wire these to a DIYLess **Slave OT**
@@ -113,7 +114,7 @@ Default pin per env (`-DHCS_ONEWIRE_PIN`, change in `platformio.ini`):
 |---|---|---|
 | `d1_mini` | **GPIO14** (D5) | 4/5 |
 | `lolin_s2_mini(_gw)` | **GPIO15** | 4/5 (+16/17 gw) |
-| `lolin_c3_mini(_gw)` | **GPIO10** | 7/6 (+4/5 gw) |
+| `lolin_c3_mini(_gw)` | **GPIO5** (D7 pad) | 8/10 (+4/5 gw) |
 | `esp32_d1_mini(_gw)` | **GPIO18** | 21/22 (+26/27 gw) |
 | `esp32s3_zero` | **GPIO1** | 5/6 |
 
