@@ -1277,10 +1277,21 @@ void NetServices::httpSelfProbeTick_() {
 
   bool ok = false;
   WiFiClient c;
-  c.setTimeout(2000);
+  // Hard deadline read: WiFiClient::setTimeout units differ per core
+  // (ESP32 = seconds!), which once blocked the whole superloop here.
   if (c.connect(IPAddress(127, 0, 0, 1), HTTP_PORT)) {
     c.print(F("GET /api/status HTTP/1.0\r\n\r\n"));
-    String line = c.readStringUntil('\n');
+    const unsigned long deadline = millis() + 2000;
+    String line;
+    while (millis() < deadline) {
+      while (c.available()) {
+        char ch = (char)c.read();
+        if (ch == '\n') break;
+        line += ch;
+      }
+      if (line.length()) break;
+      delay(2);
+    }
     ok = line.startsWith("HTTP/1");
     c.stop();
   }
