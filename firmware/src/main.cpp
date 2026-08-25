@@ -24,6 +24,7 @@
 #include <esp_system.h>
 #include <Preferences.h>
 #endif
+#include "hcs_status_led.h"
 
 #ifdef HCS_GW_ENABLE
 #if !defined(ESP32)
@@ -236,6 +237,8 @@ static void applyGwRole(bool gateway) {
 }
 #endif
 
+StatusLed status_led;  // diagnostic patterns — see hcs_status_led.h
+
 void setup() {
   Serial.begin(115200);
   delay(300);
@@ -302,6 +305,7 @@ void setup() {
     Serial.printf("[power] boot reason: %s · unclean boots: %u\n",
                   reset_reason.c_str(), unclean_boots);
   }
+  status_led.begin();
 
 
 #if CH_FAILSAFE_OFF_ON_BOOT
@@ -428,6 +432,8 @@ void setup() {
 }
 
 void loop() {
+  status_led.update(WiFi.status() == WL_CONNECTED, ot.snap().valid,
+                    fs_state == hcs::FsState::FAILSAFE);
 #ifdef HCS_TEST_BOOT
   static unsigned long last_tick = 0;
 #endif

@@ -114,7 +114,7 @@ Default pin per env (`-DHCS_ONEWIRE_PIN`, change in `platformio.ini`):
 |---|---|---|
 | `d1_mini` | **GPIO14** (D5) | 4/5 |
 | `lolin_s2_mini(_gw)` | **GPIO15** | 4/5 (+16/17 gw) |
-| `lolin_c3_mini(_gw)` | **GPIO5** (D7 pad) | 8/10 (+4/5 gw) |
+| `lolin_c3_mini(_gw)` | **GPIO1** (D5 pad — same position as 8266 GPIO14) | 8/10 (+4/5 gw) |
 | `esp32_d1_mini(_gw)` | **GPIO18** | 21/22 (+26/27 gw) |
 | `esp32s3_zero` | **GPIO1** | 5/6 |
 
