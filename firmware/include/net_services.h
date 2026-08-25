@@ -99,6 +99,8 @@ class NetServices {
   String   roll_target_url_;
   String   roll_good_url_;
   bool     roll_loaded_ = false;
+  unsigned long http_probe_ms_ = 0;
+  uint8_t  http_probe_fail_ = 0;
   bool http_started_ = false;
   String node_id_;
   HcsSettings settings_;
@@ -111,6 +113,7 @@ class NetServices {
   /** Mark a firmware URL as pending-rollback target (called by startHttpUpdate). */
   void otaMarkTarget(const String& url);
   void otaRollbackTick();
+  void httpSelfProbeTick_();
   std::function<void(const String& json)> ota_report_;
   std::function<void(const String& json)> cfg_report_;
 

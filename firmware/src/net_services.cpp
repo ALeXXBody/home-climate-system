@@ -138,6 +138,14 @@ bool NetServices::beginWifi(HcsSettings& settings) {
   store.save(settings);
   settings_ = settings;
 
+  // Modem sleep makes some chips (esp. ESP32-C3) drop inbound TCP SYNs —
+  // web UI dies while MQTT survives. Not worth 20 µA on a mains device.
+#if defined(ESP8266)
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);
+#else
+  WiFi.setSleep(false);
+#endif
+
   Serial.printf("[wifi] ok %s  MQTT %s:%u\n", WiFi.localIP().toString().c_str(),
                 settings.mqtt_host.c_str(), settings.mqtt_port);
   return true;
@@ -999,6 +1007,7 @@ void NetServices::beginArduinoOta(const HcsSettings& settings,
 
 void NetServices::loop() {
   otaRollbackTick();
+  httpSelfProbeTick_();
   if (reboot_pending_ && millis() > reboot_at_ms_) {
     Serial.println(F("[http] rebooting now"));
     delay(50);
@@ -1251,5 +1260,34 @@ void NetServices::otaRollbackTick() {
     Serial.printf("[roll] reverting to known-good: %s\n", roll_good_url_.c_str());
     roll_pending_ = false;          // otaMarkTarget will re-mark with prev URL
     startHttpUpdate(roll_good_url_);
+  }
+}
+
+
+// ── HTTP self-probe ──────────────────────────────────────────────────────
+// The web layer can wedge (TCP accepted by lwip, app never answers) while
+// MQTT in the same superloop keeps working. Probe ourselves every minute;
+// two consecutive failures → reboot, so a stuck board heals unattended.
+constexpr unsigned long HTTP_PROBE_INTERVAL_MS = 60000;
+
+void NetServices::httpSelfProbeTick_() {
+  if (!http_started_ || ota_busy_) return;
+  if (millis() - http_probe_ms_ < HTTP_PROBE_INTERVAL_MS) return;
+  http_probe_ms_ = millis();
+
+  bool ok = false;
+  WiFiClient c;
+  c.setTimeout(2000);
+  if (c.connect(IPAddress(127, 0, 0, 1), HTTP_PORT)) {
+    c.print(F("GET /api/status HTTP/1.0\r\n\r\n"));
+    String line = c.readStringUntil('\n');
+    ok = line.startsWith("HTTP/1");
+    c.stop();
+  }
+  http_probe_fail_ = ok ? 0 : (uint8_t)(http_probe_fail_ + 1);
+  if (http_probe_fail_ >= 2) {
+    Serial.println(F("[http] self-probe failed twice — restarting"));
+    http_probe_fail_ = 0;
+    scheduleReboot();
   }
 }
