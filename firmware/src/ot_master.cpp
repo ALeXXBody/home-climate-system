@@ -115,7 +115,12 @@ void OtMaster::referencePoll() {
   if (now - last_poll_ms_ < OT_STATUS_INTERVAL_MS) return;
   last_poll_ms_ = now;
 
-  unsigned long response = xchg_(OpenTherm::buildRequest(OpenThermMessageType::WRITE_DATA, OpenThermMessageID::Status, (ch_enable_ ? 0x0100 : 0) | 0x0000));
+	// Status must be READ_DATA per OT spec (boiler replies READ-ACK);
+	// WRITE_DATA here makes every boiler reject the frame (regression
+	// introduced by the v1.3.2 console refactor — see GitHub issue).
+	unsigned long response = xchg_(OpenTherm::buildRequest(
+		OpenThermMessageType::READ_DATA, OpenThermMessageID::Status,
+		(ch_enable_ ? 0x0100 : 0)));
   if (ot_.getLastResponseStatus() != OpenThermResponseStatus::SUCCESS) {
     snap_.valid = false;
     return;
