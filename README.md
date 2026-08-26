@@ -81,7 +81,7 @@ Full contract: [protocol/mqtt.md](protocol/mqtt.md) · [Wiki — MQTT](docs/wiki
 
 ## Docs
 
-- **[Docs wiki](docs/wiki/Home.md)** — [Hardware](docs/wiki/Hardware.md) · [Flash](docs/wiki/Flash-and-first-boot.md) · [MQTT](docs/wiki/MQTT-protocol.md) · [Failsafe](docs/wiki/Failsafe.md) · [Changelog](docs/wiki/Changelog.md)  
+- **[Docs wiki](docs/wiki/Home.md)** — [Hardware](docs/wiki/Hardware.md) · [Flash](docs/wiki/Flash-and-first-boot.md) · [Web UI](docs/wiki/Web-UI.md) · [MQTT](docs/wiki/MQTT-protocol.md) · [WC](docs/wiki/Weather-compensation.md) · [1-Wire](docs/wiki/1-Wire-sensors.md) · [Failsafe](docs/wiki/Failsafe.md) · [Gateway](docs/wiki/Gateway-mode.md) · [OTA](docs/wiki/OTA.md) · [Boards](docs/wiki/Boards-and-builds.md) · [Troubleshooting](docs/wiki/Troubleshooting.md) · [Changelog](docs/wiki/Changelog.md)  
 - [Hardware detail](docs/hardware.md) · [Flash detail](docs/flash.md) · [Architecture](docs/architecture.md)  
 - [Failsafe detail](docs/failsafe.md) · [Gateway design](docs/design-gateway.md)  
 - [MQTT protocol](protocol/mqtt.md) · [OTGW license notes](docs/license-otgw.md)  
