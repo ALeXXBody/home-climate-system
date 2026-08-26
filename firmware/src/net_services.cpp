@@ -485,8 +485,12 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   node_id_ = nodeId;
   settings_ = settings;
 
-  // OTA rollback state lives on LittleFS; mount once (format if empty).
+  // OTA rollback state lives on LittleFS; mount once.
+#if defined(ESP32)
   if (!LittleFS.begin(true)) {
+#else
+  if (!LittleFS.begin()) {
+#endif
     Serial.println(F("[fs] LittleFS mount failed — OTA rollback disabled"));
   } else {
     otaRollLoad_();
