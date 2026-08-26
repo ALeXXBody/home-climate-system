@@ -120,7 +120,7 @@ void OtMaster::referencePoll() {
 	// introduced by the v1.3.2 console refactor — see GitHub issue).
 	unsigned long response = xchg_(OpenTherm::buildRequest(
 		OpenThermMessageType::READ_DATA, OpenThermMessageID::Status,
-		(ch_enable_ ? 0x0100 : 0)));
+		(ch_enable_ ? 0x0100 : 0) | (dhw_enable_ ? 0x0200 : 0)));
   if (ot_.getLastResponseStatus() != OpenThermResponseStatus::SUCCESS) {
     snap_.valid = false;
     return;
@@ -295,7 +295,8 @@ void OtMaster::doPoll_() {
     snap_.outdoor_temp = OpenTherm::getFloat(resp);
   }
 
-  applyInject_();  // 1-Wire probes may override outdoor/return before WC
+  // Outdoor inject before WC so the curve sees 1-Wire outdoor.
+  applyInject_();
 
   // Effective flow target. Failsafe bypasses weather compensation so the
   // owner's manual connection-loss setpoint is used verbatim.
@@ -315,17 +316,26 @@ void OtMaster::doPoll_() {
     ot_.setBoilerTemperature(flow_setpoint_);
   }
 
+  // Library getters return 0.0 on failure (not NaN) — only accept when the
+  // last OT response was SUCCESS so we do not clobber good snapshot values.
+  auto okRead = [this]() {
+    return ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS;
+  };
+
   float t = ot_.getBoilerTemperature();
-  if (!isnan(t)) snap_.flow_temp = t;
+  if (okRead() && !isnan(t) && t > 0.0f) snap_.flow_temp = t;
 
   t = ot_.getReturnTemperature();
-  if (!isnan(t)) snap_.return_temp = t;
+  if (okRead() && !isnan(t) && t > 0.0f) snap_.return_temp = t;
 
   t = ot_.getModulation();
-  if (!isnan(t)) snap_.modulation = t;
+  if (okRead() && !isnan(t)) snap_.modulation = t;
 
   t = ot_.getDHWTemperature();
-  if (!isnan(t)) snap_.dhw_temp = t;
+  if (okRead() && !isnan(t) && t > 0.0f) snap_.dhw_temp = t;
+
+  // Re-apply inject AFTER OT return read so 1-Wire return role is not wiped.
+  applyInject_();
 
   // Max relative modulation setting (MsgID 14)
   unsigned int mm = OpenTherm::temperatureToData((float)max_mod_);

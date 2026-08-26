@@ -485,6 +485,13 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   node_id_ = nodeId;
   settings_ = settings;
 
+  // OTA rollback state lives on LittleFS; mount once (format if empty).
+  if (!LittleFS.begin(true)) {
+    Serial.println(F("[fs] LittleFS mount failed — OTA rollback disabled"));
+  } else {
+    otaRollLoad_();
+  }
+
   server.on("/", HTTP_GET, [this]() {
     server.send_P(200, "text/html", INDEX_HTML);
   });
@@ -667,6 +674,19 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     if (!d["dhw_enable"].isNull()) ot_.setDhwEnable(d["dhw_enable"].as<bool>());
     if (!d["flow_setpoint"].isNull())
       ot_.setFlowSetpoint(constrain(d["flow_setpoint"].as<float>(), 20.0f, 90.0f));
+    if (!d["dhw_setpoint"].isNull()) {
+      // "auto" / "off" → thermostat controls DHW (NaN); numeric °C otherwise
+      if (d["dhw_setpoint"].is<const char*>()) {
+        const char* s = d["dhw_setpoint"].as<const char*>();
+        if (!s || !s[0] || strcasecmp(s, "auto") == 0 || strcasecmp(s, "off") == 0) {
+          ot_.setDhwSetpoint(NAN);
+        } else {
+          ot_.setDhwSetpoint(constrain(strtof(s, nullptr), 30.0f, 70.0f));
+        }
+      } else {
+        ot_.setDhwSetpoint(constrain(d["dhw_setpoint"].as<float>(), 30.0f, 70.0f));
+      }
+    }
     if (!d["max_modulation"].isNull())
       ot_.setMaxModulation(constrain(d["max_modulation"].as<int>(), 0, 100));
     if (!d["weather_comp"].isNull()) ot_.setWeatherComp(d["weather_comp"].as<bool>());
@@ -752,7 +772,8 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     startHttpUpdate(url);
   });
 
-  server.on("/api/reboot", HTTP_POST, [this]() {
+  server.on("/api/reboot", HTTP_POST, [this, authOk]() {
+    if (!authOk()) return;
     server.send(200, "application/json", "{\"ok\":true}");
     scheduleReboot();
   });
@@ -1232,8 +1253,8 @@ void NetServices::otaMarkTarget(const String& url) {
 }
 
 void NetServices::otaRollbackTick() {
+  otaRollLoad_();  // restore pending flag from LittleFS after reboot
   if (!roll_pending_) return;
-  otaRollLoad_();
   const unsigned long up = millis();
   const bool mqtt_ok = mqtt_ok_fn_ ? mqtt_ok_fn_() : false;
 

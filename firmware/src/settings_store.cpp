@@ -208,6 +208,11 @@ bool SettingsStore::save(const HcsSettings& in) {
   prefs.putString("mqtt_prefix", in.mqtt_prefix);
   prefs.putString("dev_name", in.device_name);
   prefs.putString("ota_pass", in.ota_password);
+  prefs.putBool("wc_en", in.wc_enable);
+  prefs.putFloat("wc_ref", in.wc_t_out_ref);
+  prefs.putFloat("wc_dsn", in.wc_t_out_design);
+  prefs.putFloat("wc_fmax", in.wc_flow_max);
+  prefs.putFloat("wc_fmin", in.wc_flow_min);
   prefs.putUChar("gw_cfg", in.gw_cfg);
   prefs.putBool("ow_en", in.ow_enable);
   // write slot table; also keep legacy keys for outdoor/return channels
