@@ -2,13 +2,20 @@
 #include "config.h"
 #include "hcs_sys_log.h"
 #include "hcs_panic.h"
+#if defined(ESP32)
+#include <WiFi.h>
+#elif defined(ESP8266)
+#include <ESP8266WiFi.h>
+#endif
 
-// How many consecutive Status failures before UI shows "OT no link".
-// Single timeouts are normal on a busy bus and must not flicker the badge.
-static constexpr uint8_t kOtLinkFailThreshold = 3;
+// How many consecutive Status failures (each incl. one retry) before the UI
+// shows "OT no link". Observed WiFi-correlated outages run ~5 s; 6 fails +
+// 10 s hold keeps the badge stable through them while still reporting
+// genuine bus loss.
+static constexpr uint8_t kOtLinkFailThreshold = 6;
 // Hold "linked" this long after last good Status even if later optional
 // reads time out (optional IDs often T/O on boilers without those sensors).
-static constexpr unsigned long kOtLinkHoldMs = 5000;
+static constexpr unsigned long kOtLinkHoldMs = 10000;
 
 // ---------------------------------------------------------------------------
 // POLLED OpenTherm exchange — NO interrupt, by design.
@@ -176,7 +183,12 @@ void OtMaster::noteStatusFail_() {
     snap_.valid = false;
   }
   if (was && !snap_.valid) {
+#if defined(ESP32) || defined(ESP8266)
+    HCS_LOG("ot", "link DOWN (streak=%u rssi=%d dBm)",
+            status_fail_streak_, WiFi.RSSI());
+#else
     HCS_LOG("ot", "link DOWN (streak=%u)", status_fail_streak_);
+#endif
   }
 }
 
@@ -418,10 +430,19 @@ void OtMaster::doPoll_() {
   last_poll_ms_ = now;
   HCS_MARK("ot.poll");
 
-  // --- core: Status (link health) ----------------------------------------
-  unsigned long response = xchg_(OpenTherm::buildRequest(
+  // --- core: Status (link health), with one retry on silence -----------
+  // A WiFi burst can swallow a single frame on the marginal 3.3 V C3 +
+  // DIYLess shield drive (observed as multi-second T/O runs). Before
+  // counting a failure, give the bus one immediate retry.
+  unsigned long req = OpenTherm::buildRequest(
       OpenThermMessageType::READ_DATA, OpenThermMessageID::Status,
-      (ch_enable_ ? 0x0100 : 0) | (dhw_enable_ ? 0x0200 : 0)));
+      (ch_enable_ ? 0x0100 : 0) | (dhw_enable_ ? 0x0200 : 0));
+  unsigned long response = xchg_(req);
+  if (last_status_ != OpenThermResponseStatus::SUCCESS) {
+    delay(200);  // inter-frame gap; boiler may still be mid-reply
+    digitalWrite(OT_OUT_PIN, HIGH);
+    response = xchg_(req);
+  }
   if (!xchgOk_()) {
     noteStatusFail_();
     // Still allow 1-Wire backfill so outdoor/return stay live without OT.
