@@ -1,0 +1,14 @@
+{
+  "name": "HCS Recovery — LOLIN C3 mini",
+  "version": "1.4.9-recovery",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-C3",
+      "improv": false,
+      "parts": [
+        { "path": "recovery/hcs-recovery-c3-merged.bin", "offset": 0 }
+      ]
+    }
+  ]
+}

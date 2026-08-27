@@ -14,9 +14,18 @@
 </style>
 </head>
 <body>
-<h1>Home Climate System — firmware flasher (v1.3.4)</h1>
+<h1>Home Climate System — firmware flasher</h1>
 <p>Flashes over USB directly from this page. Works in <strong>Chrome / Edge on desktop</strong>
 (Web Serial). No drivers needed on Linux/macOS; Windows 10/11 usually auto-installs.</p>
+
+<div class="card" style="border-color:#c33; background:#fff5f5">
+  <h2>RECOVERY — board is dead / bootlooping / not on the network</h2>
+  <p>Minimal image with <strong>no OpenTherm, no 1-Wire, no status LED, no setup portal</strong>.
+  It clears the crash counter, joins your WiFi (or opens AP <code>HCS-Recovery-XXXX</code>,
+  password <code>homeclimate</code>) and shows a web page at <code>http://&lt;ip&gt;/</code>
+  for uploading full firmware over LAN. Never reboots itself.</p>
+  <esp-web-install-button manifest="manifest-recovery.json"></esp-web-install-button>
+</div>
 
 <div class="card">
   <h2>ESP8266 — D1 mini (stacked on DIYLess Master shield)</h2>
