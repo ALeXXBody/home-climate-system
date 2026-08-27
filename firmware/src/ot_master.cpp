@@ -11,53 +11,113 @@ static constexpr uint8_t kOtLinkFailThreshold = 3;
 static constexpr unsigned long kOtLinkHoldMs = 5000;
 
 // ---------------------------------------------------------------------------
-// Static IRAM ISR — DO NOT use OpenTherm::begin() with a C++ lambda
-// (FunctionalInterrupt / std::function). On ESP32-C3 that panics under load.
+// POLLED OpenTherm exchange — NO interrupt, by design.
 //
-// The entire call chain must be IRAM-resident:
-//   ot_master_isr (C, IRAM) → handleInterruptIsr (method, IRAM)
-//                           → OpenTherm::handleInterrupt (IRAM)
-// A non-IRAM C++ method wrapper was enough to panic-loop before Wi‑Fi
-// (board looked "dead" on the LAN).
+// History: every ISR-based variant crashed on ESP32-C3. Root cause: an OT
+// bus edge arriving while a flash op (LittleFS settings save / NVS write)
+// had the cache disabled made the ISR execute flash-resident code
+// (digitalRead and the library's dispatch) → abort()/PANIC. That produced
+// the 1.4.5 once-a-minute panics, the 1.4.6 brick, and the 1.4.8 bootloop.
+//
+// The master exchange is inherently blocking (the library's sendRequest()
+// already spun for the whole send+receive window), so we simply poll the
+// input pin inside that same window. Task context may call flash code any
+// time — the crash class is gone by construction.
+//
+// Bit timing and the decode state machine replicate the ihormelnyk library
+// exactly (field-proven with the DIYLess shield), so protocol behaviour is
+// inherited, not re-invented.
 // ---------------------------------------------------------------------------
-static OtMaster* volatile s_ot_master = nullptr;
-
-#if defined(ESP8266)
-void ICACHE_RAM_ATTR ot_master_isr() {
-#else
-void IRAM_ATTR ot_master_isr() {
-#endif
-  OtMaster* m = s_ot_master;
-  if (m) m->handleInterruptIsr();
-}
-
 OtMaster::OtMaster(int in_pin, int out_pin) : ot_(in_pin, out_pin) {}
 
-void IRAM_ATTR OtMaster::handleInterruptIsr() {
-  ot_.handleInterrupt();
-}
-
 void OtMaster::begin() {
-  s_ot_master = this;
-  // Put the bus idle BEFORE attaching the ISR so activateBoiler's 1 s wait
-  // does not run with a live interrupt handler (boot race on C3).
+  // Mirror OpenTherm::begin() minus attachInterrupt: pins + 1 s idle line.
   pinMode(OT_IN_PIN, INPUT);
   pinMode(OT_OUT_PIN, OUTPUT);
-  digitalWrite(OT_OUT_PIN, HIGH);  // idle line
-  delay(200);
-  // C function-pointer begin() — never the no-arg / std::function overload.
-  // (begin() will pinMode + activateBoiler again; that is fine.)
-  ot_.begin(ot_master_isr);
-  HCS_LOG("ot", "ISR attached (static IRAM) in=%d out=%d", OT_IN_PIN,
-          OT_OUT_PIN);
+  digitalWrite(OT_OUT_PIN, HIGH);  // idle
+  delay(1000);                     // activateBoiler()
+  HCS_LOG("ot", "polled OT up (no ISR) in=%d out=%d", OT_IN_PIN, OT_OUT_PIN);
 }
 
-// Single chokepoint for every bus exchange: OT console + yield so WiFi/HTTP
-// keep running during multi-frame polls (each frame can block ≤~1.1 s).
+void OtMaster::sendBit_(bool high) {
+  // Library-identical: high bit = drive ACTIVE 500 µs then IDLE 500 µs.
+  digitalWrite(OT_OUT_PIN, high ? LOW : HIGH);
+  delayMicroseconds(500);
+  digitalWrite(OT_OUT_PIN, high ? HIGH : LOW);
+  delayMicroseconds(500);
+}
+
+unsigned long OtMaster::receiveFrame_(unsigned long timeout_ms) {
+  // Poll-decode: sample OT_IN, detect edges by level change, run the
+  // library's RESPONSE state machine on each detected edge.
+  enum class St : uint8_t { WAIT, START_BIT, RECV };
+  St st = St::WAIT;
+  uint32_t resp = 0;
+  uint8_t bits = 0;
+  unsigned long ts = micros();
+  int last = digitalRead(OT_IN_PIN);
+  const unsigned long t0 = millis();
+
+  while (millis() - t0 < timeout_ms) {
+    int lvl = digitalRead(OT_IN_PIN);
+    if (lvl != last) {
+      last = lvl;
+      unsigned long now = micros();
+      switch (st) {
+        case St::WAIT:
+          if (lvl == HIGH) {
+            st = St::START_BIT;
+          } else {
+            last_status_ = OpenThermResponseStatus::INVALID;
+            return 0;
+          }
+          ts = now;
+          break;
+        case St::START_BIT:
+          if ((now - ts) < 750 && lvl == LOW) {
+            st = St::RECV;
+            bits = 0;
+          } else {
+            last_status_ = OpenThermResponseStatus::INVALID;
+            return 0;
+          }
+          ts = now;
+          break;
+        case St::RECV:
+          if ((now - ts) > 750) {
+            if (bits < 32) {
+              resp = (resp << 1) | (lvl ? 0u : 1u);  // !readState()
+              bits++;
+            } else {
+              // stop-bit edge → frame complete
+              last_status_ = OpenThermResponseStatus::SUCCESS;
+              return resp;
+            }
+            ts = now;
+          }
+          break;
+      }
+    }
+    delayMicroseconds(40);  // ~25 kHz sampling: 12 samples per 500 µs half-bit
+  }
+  last_status_ = OpenThermResponseStatus::TIMEOUT;
+  return 0;
+}
+
+// Single chokepoint for every bus exchange: OT console + status tracking.
 unsigned long OtMaster::xchg_(unsigned long req) {
   HCS_MARK("ot.xchg");
-  unsigned long resp = ot_.sendRequest(req);
-  ot_log.record(req, resp, ot_.getLastResponseStatus());
+  // ---- TX: start bit, 32 data bits MSB-first, stop bit (library timing,
+  // interrupts left ON exactly like the library's sendRequest) ----
+  sendBit_(true);
+  for (int i = 31; i >= 0; i--) sendBit_((req >> i) & 1UL);
+  sendBit_(true);
+  digitalWrite(OT_OUT_PIN, HIGH);  // idle after stop
+  yield();
+
+  // ---- RX: polled decode (task context; no ISR exists) ----
+  unsigned long resp = receiveFrame_(150);
+  ot_log.record(req, resp, last_status_);
   yield();
   return resp;
 }
@@ -163,7 +223,7 @@ void OtMaster::readFloat_(OpenThermMessageID id, float& dest, float lo,
 #ifdef HCS_GW_ENABLE
 unsigned long OtMaster::sendRaw(unsigned long frame) {
   unsigned long resp = xchg_(frame);
-  if (ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS) {
+  if (xchgOk_()) {
     noteStatusOk_(millis());
     if (OpenTherm::getMessageType(resp) >= OpenThermMessageType::READ_ACK) {
       switch ((int)OpenTherm::getDataID(resp)) {

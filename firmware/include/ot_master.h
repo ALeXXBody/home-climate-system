@@ -56,13 +56,6 @@ class OtMaster {
   /** Call very frequently from loop (handles OT response timing). */
   void loop();
 
-  /**
-   * IRAM-safe path used by the static C ISR only.
-   * MUST stay IRAM_ATTR — a flash-resident wrapper called from IRQ panics
-   * on ESP32-C3 (that brick-looped 1.4.6 before Wi‑Fi came up).
-   */
-  void IRAM_ATTR handleInterruptIsr();
-
   void setChEnable(bool on);
   void setDhwEnable(bool on);
   void setFlowSetpoint(float celsius);
@@ -108,20 +101,34 @@ class OtMaster {
 #ifdef HCS_GW_ENABLE
   unsigned long sendRaw(unsigned long frame);
   OpenThermResponseStatus lastRawStatus() {
-    return ot_.getLastResponseStatus();
+    return last_status_;
   }
   void setAutopoll(bool on) { autopoll_ = on; }
 #endif
 
  private:
+  /**
+   * Full frame exchange, all in TASK context (no ISR, by design):
+   *   1. bit-bang the request (library-identical timing)
+   *   2. poll-decode the response by sampling OT_IN (~25 kHz)
+   *
+   * Why no interrupt: on ESP32-C3 an OT edge arriving while a flash op
+   * (LittleFS/NVS) has the cache disabled crashed every ISR-based variant
+   * we shipped (1.4.5 PANICs, 1.4.6 brick, 1.4.8 bootloop). sendRequest()
+   * already blocked for the whole exchange window — polling inside the
+   * same window is electrically identical and cannot hit IRQ hazards.
+   */
+  void sendBit_(bool high);
+  unsigned long receiveFrame_(unsigned long timeout_ms);
+
   unsigned long xchg_(unsigned long req);
-  bool xchgOk_() {
-    return ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS;
+  bool xchgOk_() const {
+    return last_status_ == OpenThermResponseStatus::SUCCESS;
   }
   void noteStatusOk_(unsigned long now);
   void noteStatusFail_();
 
-  OpenTherm ot_;
+  OpenTherm ot_;  // parsing/build helpers only — its ISR is NEVER attached
   bool ch_enable_ = false;
   bool dhw_enable_ = true;
   float flow_setpoint_ = 45.0f;
@@ -137,6 +144,7 @@ class OtMaster {
   uint32_t slow_cycle_ = 0;
   uint8_t rot_ = 0;                 // optional-read round robin
   uint8_t status_fail_streak_ = 0;  // hysteresis before clearing ot_valid
+  OpenThermResponseStatus last_status_ = OpenThermResponseStatus::NONE;
   unsigned long last_dhw_write_ms_ = 0;
   unsigned long last_mm_write_ms_ = 0;
   unsigned long last_outdoor_ot_ms_ = 0;
