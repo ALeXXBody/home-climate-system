@@ -6,8 +6,8 @@
  * (outdoor temp MsgID 27 / Toutside, return temp MsgID 28 / Tret). This module owns:
  *   - DS18B20 address <-> hex-string codec (settings storage format)
  *   - role assignment validation
- *   - the override rule: a valid, fresh sensor reading wins over the
- *     OpenTherm-provided value; otherwise the OT value passes through.
+ *   - the fill rule: boiler OpenTherm wins when it reports a value;
+ *     1-Wire outdoor/return only backfills when OT did not provide one.
  *
  * Free of Arduino types so `pio test -e native` exercises the exact code.
  */
@@ -355,22 +355,37 @@ struct TempValue {
 };
 
 /**
- * Override rule. Sensor beats OpenTherm only when the sensor side is
- * valid+fresh; otherwise whatever the bus reported passes through
- * unchanged. `sensor_is_authoritative` marks that a probe is ASSIGNED to
- * this role (user intent), independent of its current health.
+ * Priority rule for outdoor (Tout) / return (Tret):
+ *   1. Boiler OpenTherm value when valid
+ *   2. Else assigned + fresh 1-Wire probe for that role
+ *   3. Else invalid (UI shows dash)
+ *
+ * Sensors never override a live boiler reading.
  */
 inline TempValue resolve_temp(bool sensor_assigned, bool sensor_fresh,
                               float sensor_c, bool ot_valid, float ot_c) {
   TempValue v;
-  if (sensor_assigned && sensor_fresh) {
+  if (ot_valid && !isnan(ot_c)) {
+    v.valid = true;
+    v.celsius = ot_c;
+    return v;
+  }
+  if (sensor_assigned && sensor_fresh && !isnan(sensor_c)) {
     v.valid = true;
     v.celsius = sensor_c;
     return v;
   }
-  v.valid = ot_valid;
-  v.celsius = ot_c;
+  v.valid = false;
+  v.celsius = 0.0f;
   return v;
+}
+
+/** Which source won for diagnostics / Sensors tab "effective" column. */
+inline const char* resolve_temp_src(bool sensor_assigned, bool sensor_fresh,
+                                    bool ot_valid, float ot_c) {
+  if (ot_valid && !isnan(ot_c)) return "opentherm";
+  if (sensor_assigned && sensor_fresh) return "sensor";
+  return "none";
 }
 
 }  // namespace hcs

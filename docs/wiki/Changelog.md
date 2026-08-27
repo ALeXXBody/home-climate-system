@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.4.2
+
+**Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.2)
+
+### Priority: boiler first, 1-Wire backfill only
+- **OpenTherm outdoor/return always wins** when the boiler reports a valid value
+- 1-Wire probes assigned as **outdoor** / **return** are used **only** when OT did not provide that channel this cycle
+- Snapshot flags `outdoor_from_ot` / `return_from_ot`; Sensors tab “effective” source shows `opentherm` vs `sensor`
+
 ## v1.4.1
 
 **Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.1)

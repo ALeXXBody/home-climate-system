@@ -465,17 +465,25 @@ void test_ow_legacy_migration(void) {
 }
 
 void test_sensor_override_rules(void) {
-  // assigned + fresh wins over OpenTherm
+  // Boiler OT has priority even when a fresh 1-Wire probe is assigned.
   hcs::TempValue v = hcs::resolve_temp(true, true, 5.5f, true, 3.2f);
   TEST_ASSERT_TRUE(v.valid);
-  TEST_ASSERT_FLOAT_WITHIN(0.01f, 5.5f, v.celsius);
-
-  // assigned but stale -> OpenTherm passes through
-  v = hcs::resolve_temp(true, false, 5.5f, true, 3.2f);
-  TEST_ASSERT_TRUE(v.valid);
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.2f, v.celsius);
+  TEST_ASSERT_EQUAL_STRING("opentherm",
+                           hcs::resolve_temp_src(true, true, true, 3.2f));
 
-  // not assigned -> OpenTherm
+  // OT missing + assigned fresh sensor -> sensor backfill
+  v = hcs::resolve_temp(true, true, 5.5f, false, NAN);
+  TEST_ASSERT_TRUE(v.valid);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 5.5f, v.celsius);
+  TEST_ASSERT_EQUAL_STRING("sensor",
+                           hcs::resolve_temp_src(true, true, false, NAN));
+
+  // OT missing + sensor stale -> invalid
+  v = hcs::resolve_temp(true, false, 5.5f, false, NAN);
+  TEST_ASSERT_FALSE(v.valid);
+
+  // not assigned + OT present -> OpenTherm
   v = hcs::resolve_temp(false, true, 5.5f, true, 3.2f);
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.2f, v.celsius);
 

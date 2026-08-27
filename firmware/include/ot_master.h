@@ -19,6 +19,9 @@ struct OtSnapshot {
   float outdoor_temp = NAN;
   float modulation = NAN;     // %
   float dhw_temp = NAN;
+  /** True when outdoor/return came from OpenTherm this cycle (not 1-Wire). */
+  bool outdoor_from_ot = false;
+  bool return_from_ot = false;
   unsigned long last_ok_ms = 0;
   // Diagnostics (MsgID 5 ASF flags, MsgID 115 OEM code)
   bool valid_asf = false;
@@ -93,16 +96,16 @@ class OtMaster {
   const OtSnapshot& snap() const { return snap_; }
 
   /**
-   * Register live 1-Wire readings. Assigned+fresh probes override the
-   * OpenTherm-provided outdoor/return values in the snapshot (and thus
-   * weather comp + telemetry). Pass nullptr to clear.
+   * Register live 1-Wire outdoor/return readings used only as backfill when
+   * the boiler does not report that channel. Boiler OT always wins when valid.
+   * Pass nullptr to clear.
    */
   void setSensorInject(const hcs::TempValue* outdoor, const hcs::TempValue* ret) {
     inj_outdoor_ = outdoor;
     inj_return_ = ret;
   }
 
-  /** Re-apply injections to the current snapshot (gateway path). */
+  /** Re-apply 1-Wire backfill to the current snapshot (gateway path). */
   void applySensorInject() { applyInject_(); }
 
   /** Run one master transaction cycle (status + reads). ~1 Hz. */
@@ -142,10 +145,15 @@ class OtMaster {
   unsigned long fhb_last_fetch_ms_ = 0;
   bool fhb_fetched_once_ = false;
 
+  /**
+   * Boiler OpenTherm has priority. 1-Wire outdoor/return only backfill when
+   * this poll did not get a valid OT value for that channel.
+   */
   void applyInject_() {
-    if (inj_outdoor_ && inj_outdoor_->valid)
+    if (!snap_.outdoor_from_ot && inj_outdoor_ && inj_outdoor_->valid)
       snap_.outdoor_temp = inj_outdoor_->celsius;
-    if (inj_return_ && inj_return_->valid) snap_.return_temp = inj_return_->celsius;
+    if (!snap_.return_from_ot && inj_return_ && inj_return_->valid)
+      snap_.return_temp = inj_return_->celsius;
   }
   void slowRead_();      // one capability read per call
   bool indexedRead_(OpenThermMessageID id, uint8_t index, uint16_t& value);

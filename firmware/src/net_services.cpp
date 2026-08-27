@@ -289,8 +289,9 @@ active.</div>
 <table><thead><tr><th>Probe</th><th>Temp</th><th>Health</th><th>Use</th></tr></thead>
 <tbody id=sen_rows></tbody></table>
 <div style="color:#999;font-size:.8rem;margin-top:6px">
-Probes auto-detected on the bus. Assign a use: <b>outdoor</b> (Tout) feeds
-weather compensation, <b>return</b> (Tret) backfills return-water, <b>custom</b>
+Probes auto-detected on the bus. Assign a use: <b>outdoor</b> (Tout) or
+<b>return</b> (Tret) — used only when the boiler does <b>not</b> report that
+value over OpenTherm (boiler always wins when present). <b>custom</b>
 publishes a named sensor to Home Assistant. Health is re-checked every poll
 (presence, stuck +85 °C trap, implausible jumps).</div>
 </div>
@@ -843,25 +844,32 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     roles["outdoor"] = cfgR.ow_addr_outdoor();
     roles["return"] = cfgR.ow_addr_return();
     JsonObject eff = d["effective"].to<JsonObject>();
-    auto chan = [&](const char* key, bool assigned, float snap_c) {
+    auto chan = [&](const char* key, bool assigned, bool from_ot, float snap_c) {
       hcs::TempValue s = sensors_
             ? sensors_->roleValue(
                   strcmp(key, "outdoor") == 0 ? hcs::OW_ROLE_OUTDOOR
                                               : hcs::OW_ROLE_RETURN,
                   now)
             : hcs::TempValue();
+      bool ot_valid = from_ot && !isnan(snap_c);
+      float ot_c = ot_valid ? snap_c : NAN;
       hcs::TempValue v = hcs::resolve_temp(assigned, s.valid, s.celsius,
-                                           !isnan(snap_c), snap_c);
+                                           ot_valid, ot_c);
+      if (!v.valid && !isnan(snap_c)) {
+        v.valid = true;
+        v.celsius = snap_c;
+      }
       JsonObject c = eff[key].to<JsonObject>();
       if (v.valid) c["c"] = roundf(v.celsius * 10) / 10.0f; else c["c"] = nullptr;
-      c["src"] = (assigned && s.valid) ? "sensor"
-               : !isnan(snap_c)        ? "opentherm"
-                                       : "none";
+      c["src"] = hcs::resolve_temp_src(assigned, s.valid, ot_valid, ot_c);
+      if (c["src"] == "none" && !isnan(snap_c))
+        c["src"] = from_ot ? "opentherm" : (assigned && s.valid ? "sensor" : "none");
     };
+    const auto& sn = ot_.snap();
     chan("outdoor", sensors_ && sensors_->outdoorAssigned(),
-         ot_.snap().outdoor_temp);
+         sn.outdoor_from_ot, sn.outdoor_temp);
     chan("return", sensors_ && sensors_->returnAssigned(),
-         ot_.snap().return_temp);
+         sn.return_from_ot, sn.return_temp);
     String j;
     serializeJson(d, j);
     server.send(200, "application/json", j);

@@ -61,9 +61,22 @@ unsigned long OtMaster::sendRaw(unsigned long frame) {
         case (int)OpenThermMessageID::Tboiler:
           snap_.flow_temp = OpenTherm::getFloat(resp);
           break;
-        case (int)OpenThermMessageID::Tret:
-          snap_.return_temp = OpenTherm::getFloat(resp);
+        case (int)OpenThermMessageID::Tret: {
+          float rt = OpenTherm::getFloat(resp);
+          if (!isnan(rt) && rt > 0.0f && rt < 110.0f) {
+            snap_.return_temp = rt;
+            snap_.return_from_ot = true;
+          }
           break;
+        }
+        case (int)OpenThermMessageID::Toutside: {
+          float ot_out = OpenTherm::getFloat(resp);
+          if (!isnan(ot_out) && ot_out > -40.0f && ot_out < 60.0f) {
+            snap_.outdoor_temp = ot_out;
+            snap_.outdoor_from_ot = true;
+          }
+          break;
+        }
         case (int)OpenThermMessageID::RelModLevel:
           snap_.modulation = OpenTherm::getFloat(resp);
           break;
@@ -289,7 +302,8 @@ void OtMaster::doPoll_() {
 
   // Outdoor temperature first (MsgID 27) so weather comp can use it this cycle.
   // Many boilers have no outdoor probe → TIMEOUT / UNKNOWN_DATA_ID. That is
-  // normal — leave the field alone so a 1-Wire "outdoor" role can fill it.
+  // normal — 1-Wire "outdoor" role backfills only when OT did not provide it.
+  snap_.outdoor_from_ot = false;
   unsigned long req = OpenTherm::buildRequest(
       OpenThermMessageType::READ_DATA, OpenThermMessageID::Toutside, 0);
   unsigned long resp = xchg_(req);
@@ -301,10 +315,12 @@ void OtMaster::doPoll_() {
     if (!isnan(ot_out) && ot_out > -40.0f && ot_out < 60.0f &&
         !(ot_out == 0.0f && (resp & 0xFFFF) == 0)) {
       snap_.outdoor_temp = ot_out;
+      snap_.outdoor_from_ot = true;
     }
   }
+  if (!snap_.outdoor_from_ot) snap_.outdoor_temp = NAN;
 
-  // Outdoor inject before WC so the curve sees 1-Wire outdoor (overrides OT).
+  // 1-Wire outdoor backfill only if OT did not provide outdoor (before WC).
   applyInject_();
 
   // Effective flow target. Failsafe bypasses weather compensation so the
@@ -334,9 +350,15 @@ void OtMaster::doPoll_() {
   float t = ot_.getBoilerTemperature();
   if (okRead() && !isnan(t) && t > 0.0f) snap_.flow_temp = t;
 
+  snap_.return_from_ot = false;
   t = ot_.getReturnTemperature();
-  // Tret unsupported on many boilers → leave previous / NaN for 1-Wire inject.
-  if (okRead() && !isnan(t) && t > 0.0f && t < 110.0f) snap_.return_temp = t;
+  // Tret unsupported on many boilers → 1-Wire return role backfills.
+  if (okRead() && !isnan(t) && t > 0.0f && t < 110.0f) {
+    snap_.return_temp = t;
+    snap_.return_from_ot = true;
+  } else {
+    snap_.return_temp = NAN;
+  }
 
   t = ot_.getModulation();
   if (okRead() && !isnan(t)) snap_.modulation = t;
@@ -344,7 +366,7 @@ void OtMaster::doPoll_() {
   t = ot_.getDHWTemperature();
   if (okRead() && !isnan(t) && t > 0.0f) snap_.dhw_temp = t;
 
-  // Re-apply inject AFTER OT return read so 1-Wire outdoor/return roles win.
+  // 1-Wire backfill after return read (only when OT did not provide the value).
   applyInject_();
 
   // Max relative modulation setting (MsgID 14)
