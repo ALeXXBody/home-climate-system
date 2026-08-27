@@ -18,7 +18,7 @@
 
 | | |
 |---|---|
-| **Current firmware** | **v1.4.8** |
+| **Current firmware** | **v1.5.0** |
 | **License** | MIT |
 
 ## Supported hardware
@@ -29,7 +29,7 @@
 
 See [docs/hardware.md](docs/hardware.md) and the [Wiki — Hardware](https://github.com/ALeXXBody/home-climate-system/wiki/Hardware).
 
-## Firmware (v1.4.8)
+## Firmware (v1.5.0)
 
 PlatformIO project under `firmware/`.
 
@@ -59,7 +59,7 @@ PlatformIO project under `firmware/`.
 `d1_mini`, `lolin_s2_mini`, `lolin_c3_mini`, `esp32_d1_mini`, `esp32s3_zero`  
 (+ `lolin_s2_mini_gw`, `esp32_d1_mini_gw`, `lolin_c3_mini_gw`)
 
-Release assets: [v1.4.8](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.8)  
+Release assets: [v1.5.0](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.0)  
 (`firmware-<env>.bin` for each board)
 
 ## Quick start
