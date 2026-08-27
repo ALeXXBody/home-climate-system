@@ -280,25 +280,29 @@ void MqttBridge::publishDiscovery() {
 }
 
 void MqttBridge::publishTelemetry(const OtSnapshot& s) {
+  // Always heartbeat — HCC uses any leaf under hcs/<node>/ as liveness.
+  // Gating temps on s.valid used to go silent whenever OT blipped, which
+  // made the HA pill flip to "Boiler disconnected" even though the board
+  // was up (and 1-Wire outdoor/return were still valid).
   publish(hcsTopic(node_id_, "online"), "online", true);
+  publish(hcsTopic(node_id_, "ot_valid"), s.valid ? "ON" : "OFF");
   publishCtl();
 
-  if (s.valid) {
-    publish(hcsTopic(node_id_, "flame"), s.flame ? "ON" : "OFF");
-    publish(hcsTopic(node_id_, "ch_active"), s.ch_active ? "ON" : "OFF");
-    publish(hcsTopic(node_id_, "fault"), s.fault ? "ON" : "OFF");
-    if (!isnan(s.flow_temp))
-      publish(hcsTopic(node_id_, "flow_temp"), f2(s.flow_temp));
-    if (!isnan(s.return_temp))
-      publish(hcsTopic(node_id_, "return_temp"), f2(s.return_temp));
-    if (!isnan(s.outdoor_temp))
-      publish(hcsTopic(node_id_, "outdoor_temp"), f2(s.outdoor_temp));
-    if (!isnan(s.modulation))
-      publish(hcsTopic(node_id_, "modulation"), f2(s.modulation));
-    if (s.valid_pressure) publish(hcsTopic(node_id_, "ch_pressure"), f2(s.pressure_bar));
-    if (!isnan(ot_.dhwSetpoint()))
-      publish(hcsTopic(node_id_, "dhw_setpoint"), f2(ot_.dhwSetpoint()), true);
-  }
+  publish(hcsTopic(node_id_, "flame"), s.flame ? "ON" : "OFF");
+  publish(hcsTopic(node_id_, "ch_active"), s.ch_active ? "ON" : "OFF");
+  publish(hcsTopic(node_id_, "fault"), s.fault ? "ON" : "OFF");
+  if (!isnan(s.flow_temp))
+    publish(hcsTopic(node_id_, "flow_temp"), f2(s.flow_temp));
+  if (!isnan(s.return_temp))
+    publish(hcsTopic(node_id_, "return_temp"), f2(s.return_temp));
+  if (!isnan(s.outdoor_temp))
+    publish(hcsTopic(node_id_, "outdoor_temp"), f2(s.outdoor_temp));
+  if (!isnan(s.modulation))
+    publish(hcsTopic(node_id_, "modulation"), f2(s.modulation));
+  if (s.valid_pressure)
+    publish(hcsTopic(node_id_, "ch_pressure"), f2(s.pressure_bar));
+  if (!isnan(ot_.dhwSetpoint()))
+    publish(hcsTopic(node_id_, "dhw_setpoint"), f2(ot_.dhwSetpoint()), true);
 
   // Boiler diagnostics -> retained clean text + raw numbers (change-gated)
   {

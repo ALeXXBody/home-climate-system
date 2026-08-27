@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.4.5
+
+**Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.5)
+
+### Always publish MQTT telemetry (HCC "Boiler disconnected" fix)
+- Telemetry (online, flame, temps including 1-Wire outdoor/return) is published every cycle even when OpenTherm Status is down
+- New retained/live `ot_valid` topic so HCC can show "OT not linked" separately from board MQTT offline
+
 ## v1.4.4
 
 **Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.4)
