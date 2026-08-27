@@ -402,7 +402,8 @@ function applyWc(){ctl({wc_ref:+wc_ref.value,wc_design:+wc_design.value,
 function applyFs(){jpost('/api/failsafe',{enable:fslbl.textContent.includes('ARMED'),
  flow:+fs_flow.value,grace_min:+fs_grace.value}).then(refresh)}
 function fsCfg(on){jpost('/api/failsafe',{enable:on,flow:+fs_flow.value,grace_min:+fs_grace.value}).then(refresh)}
-async function refresh(){try{paint(await jget('/api/status'))}catch(e){$('otb').textContent='API err'}}
+let api_fail=0;
+async function refresh(){try{paint(await jget('/api/status'));api_fail=0}catch(e){api_fail++;if(api_fail>=3)$('otb').textContent='API err'}}
 function ctl(b){jpost('/api/control',b).then(refresh)}
 async function loadSensors(){
  try{const s=await jget('/api/sensors');

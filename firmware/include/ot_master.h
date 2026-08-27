@@ -44,8 +44,8 @@ struct OtSnapshot {
   int8_t maxtset_ub = -1, maxtset_lb = -1;
   bool valid_fhb = false;
   uint8_t fhb_size = 0;
-  uint8_t fhb_codes[8] = {0};   // first entries of the fault-history buffer
-  uint8_t fhb_count = 0;        // how many entries were actually fetched
+  uint8_t fhb_codes[8] = {0};
+  uint8_t fhb_count = 0;
 };
 
 class OtMaster {
@@ -56,36 +56,23 @@ class OtMaster {
   /** Call very frequently from loop (handles OT response timing). */
   void loop();
 
-  /** Desired commands from MQTT / app. */
   void setChEnable(bool on);
   void setDhwEnable(bool on);
   void setFlowSetpoint(float celsius);
   void setMaxModulation(int percent);
 
-  /** Weather compensation: on/off + curve config CSV ("<ref>,<design>,<fmax>,<fmin>"). */
   void setWeatherComp(bool on) { wc_.enable = on; }
   bool setWeatherCompCfg(const char* csv);
   bool weatherComp() const { return wc_.enable; }
   const HcsWeatherComp& weatherCompCfg() const { return wc_; }
-  /** Last effective (weather-compensated) target °C, NAN when inactive/unknown. */
   float wcTarget() const { return wc_target_; }
 
-  /**
-   * Desired DHW setpoint (°C). Clamped to boiler-reported bounds once
-   * known; written as remote parameter TdhwSet (ID 56) in poll().
-   * NAN disables the write (thermostat keeps control).
-   */
   void setDhwSetpoint(float c) { dhw_setpoint_ = c; }
   float dhwSetpoint() const { return dhw_setpoint_; }
 
-  /**
-   * Failsafe mode: bypass weather compensation so the manual flow setpoint
-   * (owner's connection-loss value) is used verbatim.
-   */
   void setFailsafeHeat(bool on) { failsafe_ = on; }
   bool failsafeHeat() const { return failsafe_; }
 
-  /** One lightweight read cycle for gateway reference mode (bus idle). */
   void referencePoll();
 
   bool chEnable() const { return ch_enable_; }
@@ -96,36 +83,37 @@ class OtMaster {
   const OtSnapshot& snap() const { return snap_; }
 
   /**
-   * Register live 1-Wire outdoor/return readings used only as backfill when
-   * the boiler does not report that channel. Boiler OT always wins when valid.
-   * Pass nullptr to clear.
+   * 1-Wire outdoor/return backfill only when OT did not report that channel.
+   * Boiler OT always wins when valid.
    */
   void setSensorInject(const hcs::TempValue* outdoor, const hcs::TempValue* ret) {
     inj_outdoor_ = outdoor;
     inj_return_ = ret;
   }
 
-  /** Re-apply 1-Wire backfill to the current snapshot (gateway path). */
   void applySensorInject() { applyInject_(); }
 
-  /** Run one master transaction cycle (status + reads). ~1 Hz. */
+  /** Run one master transaction cycle. ~1 Hz, thin (HTTP-friendly). */
   void poll();
 
-  // OT console: last master↔boiler exchanges (web UI + /api/otlog).
   hcs::OtLog ot_log;
 
 #ifdef HCS_GW_ENABLE
-  /** Gateway mode: demand-driven raw transaction; updates link health. */
   unsigned long sendRaw(unsigned long frame);
   OpenThermResponseStatus lastRawStatus() {
     return ot_.getLastResponseStatus();
   }
-  /** Disable the autonomous ~1 Hz status cycle while gateway drives the bus. */
   void setAutopoll(bool on) { autopoll_ = on; }
 #endif
 
  private:
   unsigned long xchg_(unsigned long req);
+  bool xchgOk_() {
+    return ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS;
+  }
+  void noteStatusOk_(unsigned long now);
+  void noteStatusFail_();
+
   OpenTherm ot_;
   bool ch_enable_ = false;
   bool dhw_enable_ = true;
@@ -137,28 +125,31 @@ class OtMaster {
   unsigned long last_poll_ms_ = 0;
   const hcs::TempValue* inj_outdoor_ = nullptr;
   const hcs::TempValue* inj_return_ = nullptr;
-  float dhw_setpoint_ = NAN;   // NAN = thermostat controls DHW
+  float dhw_setpoint_ = NAN;
   bool failsafe_ = false;
   uint32_t slow_cycle_ = 0;
-  uint8_t poll_div_ = 0;            // slow-read throttle (every 3rd poll)
+  uint8_t rot_ = 0;                 // optional-read round robin
+  uint8_t status_fail_streak_ = 0;  // hysteresis before clearing ot_valid
   unsigned long last_dhw_write_ms_ = 0;
+  unsigned long last_mm_write_ms_ = 0;
+  unsigned long last_outdoor_ot_ms_ = 0;
+  unsigned long last_return_ot_ms_ = 0;
   unsigned long fhb_last_fetch_ms_ = 0;
   bool fhb_fetched_once_ = false;
 
-  /**
-   * Boiler OpenTherm has priority. 1-Wire outdoor/return only backfill when
-   * this poll did not get a valid OT value for that channel.
-   */
   void applyInject_() {
     if (!snap_.outdoor_from_ot && inj_outdoor_ && inj_outdoor_->valid)
       snap_.outdoor_temp = inj_outdoor_->celsius;
     if (!snap_.return_from_ot && inj_return_ && inj_return_->valid)
       snap_.return_temp = inj_return_->celsius;
   }
-  void slowRead_();      // one capability read per call
+  void slowRead_();
   bool indexedRead_(OpenThermMessageID id, uint8_t index, uint16_t& value);
   void fetchFhb_();
-  void doPoll_();        // full ~1 Hz master cycle
+  void doPoll_();
+  void writeTSet_();
+  void readFloat_(OpenThermMessageID id, float& dest, float lo, float hi,
+                  bool* from_ot_flag);
 
 #ifdef HCS_GW_ENABLE
   bool autopoll_ = true;

@@ -1,8 +1,8 @@
 # Changelog
 
-## v1.4.2
+## v1.4.3
 
-**Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.2)
+**Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.3)
 
 ### Priority: boiler first, 1-Wire backfill only
 - **OpenTherm outdoor/return always wins** when the boiler reports a valid value
