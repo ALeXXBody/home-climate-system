@@ -1,5 +1,6 @@
 #include "ot_master.h"
 #include "config.h"
+#include "hcs_sys_log.h"
 
 // How many consecutive Status failures before UI shows "OT no link".
 // Single timeouts are normal on a busy bus and must not flicker the badge.
@@ -57,12 +58,16 @@ bool OtMaster::setWeatherCompCfg(const char* csv) {
 }
 
 void OtMaster::noteStatusOk_(unsigned long now) {
+  if (!snap_.valid || status_fail_streak_ > 0) {
+    HCS_LOG("ot", "link UP");
+  }
   status_fail_streak_ = 0;
   snap_.valid = true;
   snap_.last_ok_ms = now;
 }
 
 void OtMaster::noteStatusFail_() {
+  bool was = snap_.valid;
   if (status_fail_streak_ < 255) status_fail_streak_++;
   if (status_fail_streak_ >= kOtLinkFailThreshold) {
     snap_.valid = false;
@@ -70,7 +75,9 @@ void OtMaster::noteStatusFail_() {
              (millis() - snap_.last_ok_ms) > kOtLinkHoldMs) {
     snap_.valid = false;
   }
-  // else keep previous valid=true so the UI does not flicker on one blip
+  if (was && !snap_.valid) {
+    HCS_LOG("ot", "link DOWN (streak=%u)", status_fail_streak_);
+  }
 }
 
 void OtMaster::writeTSet_() {

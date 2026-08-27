@@ -4,6 +4,7 @@
 #include "hcs_commands.h"
 #include "hcs_boiler_text.h"
 #include "hcs_sensors.h"
+#include "hcs_sys_log.h"
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
 #include "ot_gateway.h"
 #endif
@@ -175,7 +176,10 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
       }
       break;
     case HCS_CMD_REBOOT:
-      delay(100);
+      // Never act on empty retained leftovers; require a real payload edge.
+      if (payload.length() == 0) break;
+      HCS_LOG("mqtt", "reboot command received");
+      delay(150);
       ESP.restart();
       break;
     case HCS_CMD_OTA_URL:

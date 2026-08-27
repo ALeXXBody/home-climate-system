@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.4.4
+
+**Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.4)
+
+### Stop reboot loop + system Log console
+- **HTTP self-probe no longer reboots** — it was connecting to itself from the same superloop that serves HTTP, false-failing, and scheduling `SW_RESET` about every 1–2 minutes
+- Probe is diagnostic only (logs fail/OK every 2 min)
+- New **Log** tab + `GET /api/log` — boot reason, OT link up/down, scheduled reboot reason, HTTP probe, OTA rollback
+- Every `scheduleReboot` records a reason shown in System + Log
+- MQTT reboot ignores empty payloads (no retained-edge surprise)
+
 ## v1.4.3
 
 **Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.3)

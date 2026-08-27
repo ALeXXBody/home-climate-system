@@ -3,6 +3,7 @@
 #include "hcs_sensors.h"
 #include "mqtt_bridge.h"
 #include "hcs_boiler_text.h"
+#include "hcs_sys_log.h"
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
 #include "ot_gateway.h"
 #endif
@@ -10,6 +11,10 @@
 #include <WiFiManager.h>
 #include <ArduinoOTA.h>
 #include <LittleFS.h>
+
+namespace hcs {
+SysLog g_log;
+}
 
 #if defined(ESP8266)
 #include <ESP8266WiFi.h>
@@ -168,7 +173,7 @@ h1{font-size:1.2rem;font-weight:600;margin:0;flex:1}
 .badge{padding:2px 10px;border-radius:999px;font-size:.72rem;font-weight:700;text-transform:uppercase}
 .b-on{background:#1b5e20;color:#c8e6c9}.b-off{background:#333;color:#aaa}.b-warn{background:#7a3b00;color:#ffe0b2}
 nav{display:flex;gap:4px;border-bottom:1px solid #333;padding-bottom:8px;margin-bottom:14px}
-nav button{flex:1;background:none;border:none;color:#999;padding:8px 2px;cursor:pointer;font-size:.9rem;border-radius:8px 8px 0 0}
+nav button{flex:1;background:none;border:none;color:#999;padding:8px 1px;cursor:pointer;font-size:.78rem;border-radius:8px 8px 0 0}
 nav button.act{color:#03a9f4;background:#1c1c1c;font-weight:600}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .card{background:#1c1c1c;border:1px solid #2c2c2c;border-radius:12px;padding:12px}
@@ -194,6 +199,7 @@ a{color:#03a9f4;text-decoration:none}
 <button data-t=sensors>Sensors</button>
 <button data-t=settings>Settings</button>
 <button data-t=system>System</button>
+<button data-t=log>Log</button>
 </nav>
 <section id=t-status class=act>
 <div class=grid>
@@ -331,6 +337,11 @@ publishes a named sensor to Home Assistant. Health is re-checked every poll
 <pre id=otlog style="max-height:220px;overflow:auto;background:#111;color:#9f9;padding:8px;font-size:11px;white-space:pre-wrap"></pre>
 </div>
 <div class=card style=margin-top:10px>
+<label>Last reboot</label>
+<div class=v style="font-size:.95rem" id=i_rr>&mdash;</div>
+<div style="color:#999;font-size:.8rem;margin-top:4px">Unclean boots: <b id=i_uc>0</b> · Last scheduled reboot reason in Log tab</div>
+</div>
+<div class=card style=margin-top:10px>
 <label>Firmware update over the air</label>
 
 <label>Flash from URL (.bin)</label>
@@ -339,6 +350,23 @@ publishes a named sensor to Home Assistant. Health is re-checked every poll
 <label>Maintenance</label>
 <button class=g onclick="doReboot()">Reboot device</button>
 </div></section>
+<section id=t-log>
+<div class=card>
+<label>System log (newest at bottom · also on Serial 115200)</label>
+<div class=row style=margin:6px 0>
+<button class=a onclick="sysLog()">Refresh</button>
+<button onclick="fetch('/api/log?clear=1').then(()=>sysLog())">Clear</button>
+<label style="margin:0;display:flex;align-items:center;gap:6px;color:#ccc">
+<input type=checkbox id=log_auto checked style="width:auto;margin:0"> auto 3s</label>
+</div>
+<pre id=syslog style="max-height:420px;overflow:auto;background:#0a0a0a;color:#cde;padding:10px;font-size:11px;line-height:1.35;white-space:pre-wrap;font-family:ui-monospace,monospace"></pre>
+</div>
+<div class=card style=margin-top:10px;color:#999;font-size:.8rem>
+Boot reason and every scheduled reboot are logged here. If uptime never
+passes ~1–2 minutes, look for <code>http-probe</code> or <code>reboot</code> lines —
+those were the old self-heal path (disabled from v1.4.4; probe only logs).
+</div>
+</section>
 <footer>Home Climate System &middot; MIT &middot; <a href=/api/status target=_blank>API</a></footer>
 <script>
 const $=id=>document.getElementById(id);
@@ -369,11 +397,13 @@ function paint(s){
    dhwbounds.textContent=s.boiler?.dhw_bounds?('boiler allows '+s.boiler.dhw_bounds):'';}
  $('fsp').textContent=s.flow_setpoint;$('cch').textContent=yn(s.ch_enable);
  $('cdhw').textContent=yn(s.dhw_enable);
- $('i_board').textContent=s.board+' · '+s.ip;
- $('i_ver').textContent=s.version;$('i_node').textContent=s.node_id;
- $('i_ip').textContent=s.ip;$('i_rssi').textContent=(s.rssi??'—')+' dBm';
- $('i_up').textContent=Math.floor((s.uptime||0)/3600)+'h '+Math.floor(((s.uptime||0)%3600)/60)+'m';
- $('i_mqtt').textContent=(s.mqtt_host||'not set')+':'+(s.mqtt_port||1883);
+  $('i_board').textContent=s.board+' · '+s.ip;
+  $('i_ver').textContent=s.version;$('i_node').textContent=s.node_id;
+  $('i_ip').textContent=s.ip;$('i_rssi').textContent=(s.rssi??'—')+' dBm';
+  $('i_up').textContent=Math.floor((s.uptime||0)/3600)+'h '+Math.floor(((s.uptime||0)%3600)/60)+'m';
+  $('i_mqtt').textContent=(s.mqtt_host||'not set')+':'+(s.mqtt_port||1883);
+  if($('i_rr'))$('i_rr').textContent=(s.reset_reason||'?')+(s.last_reboot_reason?(' · last schedule: '+s.last_reboot_reason):'');
+  if($('i_uc'))$('i_uc').textContent=s.unclean_boots??0;
  if(document.activeElement&&document.activeElement.id!=='isfp'&&document.activeElement.id!=='rsfp'){
    isfp.value=s.flow_setpoint;if(+rsfp.value!==+s.flow_setpoint)rsfp.value=s.flow_setpoint;}
  mm.value=s.max_modulation;mmlbl.textContent=' '+s.max_modulation+'%';
@@ -405,6 +435,8 @@ function fsCfg(on){jpost('/api/failsafe',{enable:on,flow:+fs_flow.value,grace_mi
 let api_fail=0;
 async function refresh(){try{paint(await jget('/api/status'));api_fail=0}catch(e){api_fail++;if(api_fail>=3)$('otb').textContent='API err'}}
 function ctl(b){jpost('/api/control',b).then(refresh)}
+ async function sysLog(){try{const d=await jget('/api/log');const el=$('syslog');
+ el.textContent=(d.lines||[]).join('\n');el.scrollTop=el.scrollHeight}catch(e){}}
 async function loadSensors(){
  try{const s=await jget('/api/sensors');
   sn_pin.textContent=s.pin>=0?s.pin:'n/a';
@@ -456,6 +488,8 @@ function show(t){
  document.querySelectorAll('section').forEach(s=>s.classList.toggle('act',s.id==='t-'+t));
  if(t==='settings')loadSettings();
  if(t==='sensors')loadSensors();
+ if(t==='log')sysLog();
+ if(t==='system')otLog();
 }
 setInterval(()=>{if(document.getElementById('t-sensors').classList.contains('act'))loadSensors();},5000);
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.t));
@@ -481,6 +515,7 @@ async function otaFromUrl(){const u=ourl.value.trim();if(!u)return;
  await jpost('/api/ota',{url:u});alert('Update started.');}
 async function doReboot(){if(confirm('Reboot device?')){await jpost('/api/reboot');}}
 setInterval(refresh,3000);refresh();
+setInterval(()=>{if($('log_auto')&&$('log_auto').checked&&document.getElementById('t-log').classList.contains('act'))sysLog()},3000);
 </script></body></html>)HTML";
 
 void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
@@ -496,7 +531,11 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     Serial.println(F("[fs] LittleFS mount failed — OTA rollback disabled"));
   } else {
     otaRollLoad_();
+    if (roll_pending_) {
+      HCS_LOG("roll", "pending target after boot (attempts=%u)", roll_attempts_);
+    }
   }
+  HCS_LOG("http", "server start node=%s", node_id_.c_str());
 
   server.on("/", HTTP_GET, [this]() {
     server.send_P(200, "text/html", INDEX_HTML);
@@ -519,6 +558,22 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     server.send(200, "application/json", out);
   });
 
+  server.on("/api/log", HTTP_GET, [this]() {
+    if (server.hasArg("clear")) hcs::g_log.clear();
+    JsonDocument doc;
+    JsonArray arr = doc["lines"].to<JsonArray>();
+    uint8_t n = hcs::g_log.count();
+    for (uint8_t i = 0; i < n; i++) arr.add(hcs::g_log.line(i));
+    doc["reset_reason"] = reset_reason_;
+    doc["last_reboot_reason"] = last_reboot_reason_;
+    doc["unclean_boots"] = unclean_boots_;
+    doc["uptime"] = millis() / 1000UL;
+    String out;
+    serializeJson(doc, out);
+    server.sendHeader("Cache-Control", "no-store");
+    server.send(200, "application/json", out);
+  });
+
   server.on("/api/status", HTTP_GET, [this]() {
     const OtSnapshot& s = ot_.snap();
     JsonDocument doc;
@@ -532,6 +587,7 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     doc["rssi"] = WiFi.RSSI();
     doc["uptime"] = millis() / 1000UL;
     doc["reset_reason"] = reset_reason_;
+    doc["last_reboot_reason"] = last_reboot_reason_;
     doc["unclean_boots"] = unclean_boots_;
     doc["ot_valid"] = s.valid;
     doc["ch_enable"] = ot_.chEnable();
@@ -781,7 +837,7 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   server.on("/api/reboot", HTTP_POST, [this, authOk]() {
     if (!authOk()) return;
     server.send(200, "application/json", "{\"ok\":true}");
-    scheduleReboot();
+    scheduleReboot(500, "api/reboot");
   });
 
   // ---- 1-Wire sensors -------------------------------------------------
@@ -983,7 +1039,7 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     store.save(settings_);
     server.send(200, "application/json",
                 "{\"ok\":true,\"message\":\"saved, rebooting\"}");
-    scheduleReboot(800);
+    scheduleReboot(800, "gw mode change");
   });
 
   server.on("/api/gw/override", HTTP_POST, [this, authOk]() {
@@ -1043,8 +1099,8 @@ void NetServices::loop() {
   otaRollbackTick();
   httpSelfProbeTick_();
   if (reboot_pending_ && millis() > reboot_at_ms_) {
-    Serial.println(F("[http] rebooting now"));
-    delay(50);
+    HCS_LOG("reboot", "executing now (%s)", last_reboot_reason_.c_str());
+    delay(80);
     ESP.restart();
   }
   if (http_started_) {
@@ -1122,7 +1178,7 @@ bool NetServices::applySettingsJson(const String& json) {
 
   // Echo the new state before the reboot pulls the MQTT link down.
   if (cfg_report_) cfg_report_(settingsSnapshotJson());
-  scheduleReboot(1500);
+  scheduleReboot(1500, "settings saved");
   return true;
 }
 
@@ -1205,17 +1261,19 @@ bool NetServices::startHttpUpdate(const String& url) {
     case HTTP_UPDATE_OK:
       Serial.println(F("[ota] ok — rebooting"));
       otaReport("done", 100, "");
-      scheduleReboot(1200);  // let the "done" report drain first
+      scheduleReboot(1200, "ota complete");  // let the "done" report drain first
       break;
   }
   ota_busy_ = false;
   return ret == HTTP_UPDATE_OK;
 }
 
-void NetServices::scheduleReboot(unsigned long delayMs) {
+void NetServices::scheduleReboot(unsigned long delayMs, const char* reason) {
   reboot_pending_ = true;
   reboot_at_ms_ = millis() + delayMs;
-  Serial.printf("[http] reboot scheduled in %lums\n", (unsigned long)delayMs);
+  last_reboot_reason_ = reason ? reason : "unspecified";
+  HCS_LOG("reboot", "scheduled in %lums — %s",
+          (unsigned long)delayMs, last_reboot_reason_.c_str());
 }
 
 
@@ -1262,7 +1320,7 @@ void NetServices::otaMarkTarget(const String& url) {
   roll_target_url_ = url;
   roll_pending_    = true;
   otaRollSave_();
-  Serial.printf("[roll] target marked (attempt %u): %s\n", roll_attempts_ + 1, url.c_str());
+  HCS_LOG("roll", "target marked attempt=%u", roll_attempts_ + 1);
 }
 
 void NetServices::otaRollbackTick() {
@@ -1272,7 +1330,7 @@ void NetServices::otaRollbackTick() {
   const bool mqtt_ok = mqtt_ok_fn_ ? mqtt_ok_fn_() : false;
 
   if (up >= OTA_CONFIRM_AFTER_MS && mqtt_ok) {
-    Serial.println(F("[roll] image confirmed healthy"));
+    HCS_LOG("roll", "image confirmed healthy via MQTT");
     roll_good_url_    = roll_target_url_;
     roll_target_url_  = "";
     roll_attempts_    = 0;
@@ -1283,39 +1341,37 @@ void NetServices::otaRollbackTick() {
 
   if (up >= OTA_REVERT_AFTER_MS && !mqtt_ok) {
     if (roll_attempts_ + 1 >= OTA_MAX_ATTEMPTS || roll_good_url_.length() == 0) {
-      Serial.printf("[roll] no safe revert possible (attempts=%u, good=%s) — giving up\n",
-                    roll_attempts_, roll_good_url_.c_str());
+      HCS_LOG("roll", "give up revert attempts=%u", roll_attempts_);
       roll_pending_ = false;
+      roll_target_url_ = "";
       otaRollSave_();
       return;
     }
     roll_attempts_++;
     otaRollSave_();
-    Serial.printf("[roll] reverting to known-good: %s\n", roll_good_url_.c_str());
+    HCS_LOG("roll", "reverting to known-good attempt=%u", roll_attempts_);
     roll_pending_ = false;          // otaMarkTarget will re-mark with prev URL
     startHttpUpdate(roll_good_url_);
   }
 }
 
 
-// ── HTTP self-probe ──────────────────────────────────────────────────────
-// The web layer can wedge (TCP accepted by lwip, app never answers) while
-// MQTT in the same superloop keeps working. Probe ourselves every minute;
-// two consecutive failures → reboot, so a stuck board heals unattended.
-constexpr unsigned long HTTP_PROBE_INTERVAL_MS = 60000;
+// ── HTTP self-probe (diagnostic only — never reboots) ────────────────────
+// Connecting to ourselves from the same superloop that serves HTTP can
+// false-fail while the stack is busy, then scheduleReboot() caused a
+// SW_RESET loop (~1–2 min uptime). From v1.4.4 we only LOG failures.
+constexpr unsigned long HTTP_PROBE_INTERVAL_MS = 120000;
 
 void NetServices::httpSelfProbeTick_() {
-  if (!http_started_ || ota_busy_) return;
+  if (!http_started_ || ota_busy_ || reboot_pending_) return;
   if (millis() - http_probe_ms_ < HTTP_PROBE_INTERVAL_MS) return;
   http_probe_ms_ = millis();
 
   bool ok = false;
   WiFiClient c;
-  // Hard deadline read: WiFiClient::setTimeout units differ per core
-  // (ESP32 = seconds!), which once blocked the whole superloop here.
-  if (c.connect(IPAddress(127, 0, 0, 1), HTTP_PORT)) {
-    c.print(F("GET /api/status HTTP/1.0\r\n\r\n"));
-    const unsigned long deadline = millis() + 2000;
+  if (c.connect(WiFi.localIP(), HTTP_PORT)) {
+    c.print(F("GET /api/status HTTP/1.0\r\nHost: hcs\r\n\r\n"));
+    const unsigned long deadline = millis() + 1500;
     String line;
     while (millis() < deadline) {
       while (c.available()) {
@@ -1324,15 +1380,18 @@ void NetServices::httpSelfProbeTick_() {
         line += ch;
       }
       if (line.length()) break;
-      delay(2);
+      delay(1);
+      yield();
     }
     ok = line.startsWith("HTTP/1");
     c.stop();
   }
-  http_probe_fail_ = ok ? 0 : (uint8_t)(http_probe_fail_ + 1);
-  if (http_probe_fail_ >= 2) {
-    Serial.println(F("[http] self-probe failed twice — restarting"));
+  if (ok) {
+    if (http_probe_fail_)
+      HCS_LOG("http", "self-probe OK (after %u fails)", http_probe_fail_);
     http_probe_fail_ = 0;
-    scheduleReboot();
+  } else {
+    http_probe_fail_ = (uint8_t)(http_probe_fail_ + 1);
+    HCS_LOG("http", "self-probe fail #%u (no reboot)", http_probe_fail_);
   }
 }

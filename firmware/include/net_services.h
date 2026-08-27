@@ -82,6 +82,9 @@ class NetServices {
     unclean_boots_ = unclean_boots;
   }
 
+  /** Last scheduled-reboot reason (empty if never scheduled this boot). */
+  const String& lastRebootReason() const { return last_reboot_reason_; }
+
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   /** Optional: expose gateway counters in /api/status. */
   void setGateway(hcs::OtGateway* gw) { gw_ = gw; }
@@ -124,11 +127,13 @@ class NetServices {
   hcs::FsState* fs_state_ptr_ = nullptr;
   String ap_name_;
   String reset_reason_ = "unknown";
+  String last_reboot_reason_;
   uint8_t unclean_boots_ = 0;
 
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   hcs::OtGateway* gw_ = nullptr;
 #endif
 
-  void scheduleReboot(unsigned long delayMs = 500);
+  void scheduleReboot(unsigned long delayMs = 500,
+                      const char* reason = "scheduled");
 };

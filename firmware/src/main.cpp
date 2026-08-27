@@ -25,6 +25,7 @@
 #include <Preferences.h>
 #endif
 #include "hcs_status_led.h"
+#include "hcs_sys_log.h"
 
 #ifdef HCS_GW_ENABLE
 #if !defined(ESP32)
@@ -305,6 +306,8 @@ void setup() {
 #endif
     Serial.printf("[power] boot reason: %s · unclean boots: %u\n",
                   reset_reason.c_str(), unclean_boots);
+    HCS_LOG("boot", "reason=%s unclean=%u fw=%s board=%s",
+            reset_reason.c_str(), unclean_boots, HCS_FW_VERSION, HCS_BOARD_NAME);
   }
   net.setPowerInfo(reset_reason, unclean_boots);
   status_led.begin();
@@ -377,12 +380,15 @@ void setup() {
   }
 
   if (!net.beginWifi(settings)) {
-    Serial.println(F("[boot] no WiFi — restarting in 10s"));
+    HCS_LOG("boot", "no WiFi — restarting in 10s");
     delay(10000);
     ESP.restart();
   }
+  HCS_LOG("wifi", "up ip=%s rssi=%d",
+          WiFi.localIP().toString().c_str(), WiFi.RSSI());
 
   nodeId = makeNodeId();
+  HCS_LOG("boot", "node=%s starting HTTP", nodeId.c_str());
   net.beginHttp(settings, nodeId);
   net.beginArduinoOta(settings, nodeId);
   net.setOtaReporter(onOtaProgress);
