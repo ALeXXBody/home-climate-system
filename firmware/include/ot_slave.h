@@ -32,9 +32,13 @@ class OtSlave {
   /** Frames that decoded as valid OpenTherm requests (SUCCESS). */
   uint32_t validRequests() const { return valid_; }
 
+  /** Used by static ISR / response callback (do not call from app code). */
+  OpenTherm& ot() { return ot_; }
+  void onFrame(unsigned long frame, OpenThermResponseStatus st);
+  static OtSlave* instance() { return instance_; }
+
  private:
   static OtSlave* instance_;
-  void onFrame(unsigned long frame, OpenThermResponseStatus st);
 
   OpenTherm ot_;
   ResponseProvider provider_;

@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.4.6
+
+**Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.6)
+
+### Fix ESP32-C3 PANIC reboot loop
+- **Root cause:** OpenTherm library `begin()` used a C++ `std::function` lambda ISR (`FunctionalInterrupt`). On ESP32-C3 that panics under OT bus traffic + Wi‑Fi.
+- **Fix:** static `IRAM_ATTR` C ISR for master (and gateway slave) — no heap/`std::function` in interrupt context
+- WS2812 status LED rate-limited + IRQs masked only during the short bit-bang
+- Panic breadcrumbs in RTC: next boot Log shows `panic last mark: …` (where the crash happened)
+- System tab shows panic mark next to reset reason
+
 ## v1.4.5
 
 **Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.5)

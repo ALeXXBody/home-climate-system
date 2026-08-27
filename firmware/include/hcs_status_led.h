@@ -83,12 +83,25 @@ class StatusLed {
   void write(bool on) {
     if (_rgb) {
 #if defined(HCS_STATUS_LED_RGB)
+      // Rate-limit WS2812 updates — bit-bang disables IRQs briefly and on
+      // ESP32-C3 that collides with the OpenTherm bus ISR → random PANIC.
+      static uint32_t last_ws = 0;
+      static bool last_on = false;
+      static Mode last_mode = OK;
+      uint32_t now = millis();
+      if (on == last_on && _mode == last_mode && (now - last_ws) < 50)
+        return;
+      last_ws = now;
+      last_on = on;
+      last_mode = _mode;
+      noInterrupts();
       switch (_mode) {
         case OK:     neopixelWrite(_pin, 0, on ? 48 : 0, 0);   break;  // green
         case NOLINK: neopixelWrite(_pin, on ? 96 : 0, 0, 0);   break;  // red
         case WIFI:   neopixelWrite(_pin, 0, 0, on ? 96 : 0);   break;  // blue
         case FAIL:   neopixelWrite(_pin, on ? 160 : 0, on ? 40 : 0, 0); break;
       }
+      interrupts();
 #endif
     } else {
       digitalWrite(_pin, (_active_low != on) ? HIGH : LOW);

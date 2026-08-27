@@ -26,6 +26,7 @@
 #endif
 #include "hcs_status_led.h"
 #include "hcs_sys_log.h"
+#include "hcs_panic.h"
 
 #ifdef HCS_GW_ENABLE
 #if !defined(ESP32)
@@ -304,10 +305,15 @@ void setup() {
     // a persistent unclean-boot counter would need an EEPROM byte slot.
     unclean_boots = clean_boot ? 0 : 1;
 #endif
+    const char* panic_at = hcs::panic_last_tag();
     Serial.printf("[power] boot reason: %s · unclean boots: %u\n",
                   reset_reason.c_str(), unclean_boots);
     HCS_LOG("boot", "reason=%s unclean=%u fw=%s board=%s",
             reset_reason.c_str(), unclean_boots, HCS_FW_VERSION, HCS_BOARD_NAME);
+    if (panic_at && panic_at[0]) {
+      HCS_LOG("panic", "last mark: %s", panic_at);
+    }
+    hcs::panic_clear();
   }
   net.setPowerInfo(reset_reason, unclean_boots);
   status_led.begin();
@@ -441,18 +447,22 @@ void setup() {
 }
 
 void loop() {
+  HCS_MARK("loop");
   status_led.update(WiFi.status() == WL_CONNECTED, ot.snap().valid,
                     fs_state == hcs::FsState::FAILSAFE);
 #ifdef HCS_TEST_BOOT
   static unsigned long last_tick = 0;
 #endif
+  HCS_MARK("ot.loop");
   ot.loop();
 #ifndef HCS_TEST_BOOT
+  HCS_MARK("sensors");
   sensors.loop();
   syncSensorInject();
 #endif
 
 #ifndef HCS_TEST_BOOT
+  HCS_MARK("net.loop");
   net.loop();
   syncWcFromDevice();
 
@@ -466,6 +476,7 @@ void loop() {
     failsafeLoop(false);
   } else if (settings.mqtt_host.length()) {
     // keep IP fresh for discovery
+    HCS_MARK("mqtt.loop");
     mqtt.setDeviceInfo(settings.device_name, net.localIp());
     mqtt.loop();
     // Announce the retained settings snapshot once per broker session so
@@ -516,6 +527,7 @@ void loop() {
     ot.poll();  // autonomous ~1 Hz master cycle (injects sensors inside poll)
   }
 #else
+  HCS_MARK("ot.poll");
   ot.poll();  // autonomous ~1 Hz master cycle (master-only builds)
 #endif
 

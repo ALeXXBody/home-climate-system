@@ -1,6 +1,7 @@
 #include "ot_master.h"
 #include "config.h"
 #include "hcs_sys_log.h"
+#include "hcs_panic.h"
 
 // How many consecutive Status failures before UI shows "OT no link".
 // Single timeouts are normal on a busy bus and must not flicker the badge.
@@ -9,18 +10,40 @@ static constexpr uint8_t kOtLinkFailThreshold = 3;
 // reads time out (optional IDs often T/O on boilers without those sensors).
 static constexpr unsigned long kOtLinkHoldMs = 5000;
 
+// ---------------------------------------------------------------------------
+// Static IRAM ISR — DO NOT use OpenTherm::begin() with a C++ lambda.
+// On ESP32-C3 the library's FunctionalInterrupt path (std::function in ISR)
+// causes random PANICs under bus noise / Wi-Fi load. A plain C function
+// pointer + IRAM_ATTR is safe on ESP8266 and all ESP32 variants.
+// ---------------------------------------------------------------------------
+static OtMaster* s_ot_master = nullptr;
+
+#if defined(ESP8266)
+void ICACHE_RAM_ATTR ot_master_isr() {
+#else
+void IRAM_ATTR ot_master_isr() {
+#endif
+  if (s_ot_master) s_ot_master->handleInterruptIsr();
+}
+
 OtMaster::OtMaster(int in_pin, int out_pin) : ot_(in_pin, out_pin) {}
 
-// NOTE: never register a custom ISR function pointer here. On ESP8266 a plain
-// function lives in flash and panics ("ISR not in IRAM!") on the first bus
-// edge; the library's no-arg begin() attaches its own IRAM-safe handler.
+void OtMaster::handleInterruptIsr() {
+  ot_.handleInterrupt();
+}
+
 void OtMaster::begin() {
-  ot_.begin();
+  s_ot_master = this;
+  // C function-pointer begin() — never the no-arg / std::function overload.
+  ot_.begin(ot_master_isr);
+  HCS_LOG("ot", "ISR attached (static IRAM) in=%d out=%d", OT_IN_PIN,
+          OT_OUT_PIN);
 }
 
 // Single chokepoint for every bus exchange: OT console + yield so WiFi/HTTP
 // keep running during multi-frame polls (each frame can block ≤~1.1 s).
 unsigned long OtMaster::xchg_(unsigned long req) {
+  HCS_MARK("ot.xchg");
   unsigned long resp = ot_.sendRequest(req);
   ot_log.record(req, resp, ot_.getLastResponseStatus());
   yield();
@@ -316,6 +339,7 @@ void OtMaster::doPoll_() {
   unsigned long now = millis();
   if (now - last_poll_ms_ < OT_STATUS_INTERVAL_MS) return;
   last_poll_ms_ = now;
+  HCS_MARK("ot.poll");
 
   // --- core: Status (link health) ----------------------------------------
   unsigned long response = xchg_(OpenTherm::buildRequest(

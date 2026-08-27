@@ -4,6 +4,7 @@
 #include "mqtt_bridge.h"
 #include "hcs_boiler_text.h"
 #include "hcs_sys_log.h"
+#include "hcs_panic.h"
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
 #include "ot_gateway.h"
 #endif
@@ -402,7 +403,9 @@ function paint(s){
   $('i_ip').textContent=s.ip;$('i_rssi').textContent=(s.rssi??'—')+' dBm';
   $('i_up').textContent=Math.floor((s.uptime||0)/3600)+'h '+Math.floor(((s.uptime||0)%3600)/60)+'m';
   $('i_mqtt').textContent=(s.mqtt_host||'not set')+':'+(s.mqtt_port||1883);
-  if($('i_rr'))$('i_rr').textContent=(s.reset_reason||'?')+(s.last_reboot_reason?(' · last schedule: '+s.last_reboot_reason):'');
+  if($('i_rr'))$('i_rr').textContent=(s.reset_reason||'?')
+    +(s.panic_last?(' · mark: '+s.panic_last):'')
+    +(s.last_reboot_reason?(' · last schedule: '+s.last_reboot_reason):'');
   if($('i_uc'))$('i_uc').textContent=s.unclean_boots??0;
  if(document.activeElement&&document.activeElement.id!=='isfp'&&document.activeElement.id!=='rsfp'){
    isfp.value=s.flow_setpoint;if(+rsfp.value!==+s.flow_setpoint)rsfp.value=s.flow_setpoint;}
@@ -589,6 +592,10 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     doc["reset_reason"] = reset_reason_;
     doc["last_reboot_reason"] = last_reboot_reason_;
     doc["unclean_boots"] = unclean_boots_;
+    {
+      const char* pt = hcs::panic_last_tag();
+      if (pt && pt[0]) doc["panic_last"] = pt;
+    }
     doc["ot_valid"] = s.valid;
     doc["ch_enable"] = ot_.chEnable();
     doc["dhw_enable"] = ot_.dhwEnable();

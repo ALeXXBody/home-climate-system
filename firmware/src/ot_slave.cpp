@@ -5,12 +5,23 @@
 namespace hcs {
 
 OtSlave* OtSlave::instance_ = nullptr;
+
+// Static IRAM ISR — same rationale as OtMaster (no std::function in ISR).
+static void IRAM_ATTR ot_slave_isr() {
+  OtSlave* s = OtSlave::instance();
+  if (s) s->ot().handleInterrupt();
+}
+
+static void ot_slave_on_response(unsigned long frame,
+                                 OpenThermResponseStatus st) {
+  OtSlave* s = OtSlave::instance();
+  if (s) s->onFrame(frame, st);
+}
+
 void OtSlave::begin() {
   instance_ = this;
-  ot_.begin(
-      [](unsigned long frame, OpenThermResponseStatus st) {
-        if (instance_) instance_->onFrame(frame, st);
-      });
+  // C function ISR + C function response callback (not std::function).
+  ot_.begin(ot_slave_isr, ot_slave_on_response);
 }
 
 void OtSlave::onFrame(unsigned long frame, OpenThermResponseStatus st) {

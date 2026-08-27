@@ -56,6 +56,9 @@ class OtMaster {
   /** Call very frequently from loop (handles OT response timing). */
   void loop();
 
+  /** IRAM-safe path used by the static C ISR (do not call from app code). */
+  void handleInterruptIsr();
+
   void setChEnable(bool on);
   void setDhwEnable(bool on);
   void setFlowSetpoint(float celsius);
