@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.4.8
+
+**Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.8)
+
+### Real 1.4.7 boot crash (addr2line)
+Serial dump showed `abort()` in `rmt_driver_install` ← `neopixelWrite` ← `StatusLed::write` ← `setup()` **before Wi‑Fi**.
+
+- **Removed WS2812/RMT status LED** on C3 (and S3-Zero). Plain GPIO blink only; RGB flag ignored.
+- Boot order: OT safe-mode decision before LED
+- Cap/clear unclean_boots after 90 s stable so safe-mode can exit
+
 ## v1.4.7
 
 **Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.7)

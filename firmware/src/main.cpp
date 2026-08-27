@@ -303,6 +303,9 @@ void setup() {
     } else if (unclean_boots < 250) {
       unclean_boots += 1;
     }
+    // Cap so NVS does not stick at 250 forever after a long crash loop;
+    // once we boot a fixed image and stay up, loop() clears this.
+    if (unclean_boots > 20) unclean_boots = 20;
     pp.putUChar("unclean_boots", unclean_boots);
     pp.end();
 #else
@@ -321,19 +324,22 @@ void setup() {
     hcs::panic_clear();
   }
   net.setPowerInfo(reset_reason, unclean_boots);
-  status_led.begin();
 
-  // OT safe-mode: too many unclean boots → do NOT touch the OT bus/ISR so
-  // Wi‑Fi + web UI can stay up long enough to OTA a fixed image.
+  // OT safe-mode FIRST (before any peripheral that can abort).
+  // Too many unclean boots → do NOT touch the OT bus/ISR so Wi‑Fi + web
+  // UI can stay up long enough to OTA a fixed image.
   ot_safe_mode = (unclean_boots >= kOtSafeModeUnclean);
   if (ot_safe_mode) {
     HCS_LOG("boot", "OT SAFE-MODE (unclean=%u) — OpenTherm disabled, OTA only",
             unclean_boots);
-    // Keep bus idle / pins quiet.
     pinMode(OT_IN_PIN, INPUT);
     pinMode(OT_OUT_PIN, OUTPUT);
     digitalWrite(OT_OUT_PIN, HIGH);
   }
+
+  // Status LED after safe-mode decision. Must never call neopixelWrite/RMT
+  // (C3 abort in rmt_driver_install — that was the 1.4.7 boot loop).
+  status_led.begin();
 
 #if CH_FAILSAFE_OFF_ON_BOOT
   ot.setChEnable(false);
@@ -468,6 +474,22 @@ void setup() {
 
 void loop() {
   HCS_MARK("loop");
+  // After 90 s of continuous run, treat unclean crash counter as healed so
+  // the next power cycle does not stay stuck in OT safe-mode forever.
+  {
+    static bool healed = false;
+    if (!healed && millis() > 90000UL) {
+      healed = true;
+#if defined(ESP32)
+      Preferences pp;
+      if (pp.begin("hcs", false)) {
+        pp.putUChar("unclean_boots", 0);
+        pp.end();
+        HCS_LOG("boot", "stable 90s — cleared unclean_boots");
+      }
+#endif
+    }
+  }
   status_led.update(WiFi.status() == WL_CONNECTED, ot.snap().valid,
                     fs_state == hcs::FsState::FAILSAFE);
 #ifdef HCS_TEST_BOOT
