@@ -242,6 +242,11 @@ static void applyGwRole(bool gateway) {
 
 StatusLed status_led;  // diagnostic patterns — see hcs_status_led.h
 
+// After this many consecutive PANIC/WDT boots, skip OpenTherm init so Wi‑Fi
+// + HTTP still come up and OTA recovery is possible (board was "dead" on LAN).
+static constexpr uint8_t kOtSafeModeUnclean = 3;
+static bool ot_safe_mode = false;
+
 void setup() {
   Serial.begin(115200);
   delay(300);
@@ -318,6 +323,17 @@ void setup() {
   net.setPowerInfo(reset_reason, unclean_boots);
   status_led.begin();
 
+  // OT safe-mode: too many unclean boots → do NOT touch the OT bus/ISR so
+  // Wi‑Fi + web UI can stay up long enough to OTA a fixed image.
+  ot_safe_mode = (unclean_boots >= kOtSafeModeUnclean);
+  if (ot_safe_mode) {
+    HCS_LOG("boot", "OT SAFE-MODE (unclean=%u) — OpenTherm disabled, OTA only",
+            unclean_boots);
+    // Keep bus idle / pins quiet.
+    pinMode(OT_IN_PIN, INPUT);
+    pinMode(OT_OUT_PIN, OUTPUT);
+    digitalWrite(OT_OUT_PIN, HIGH);
+  }
 
 #if CH_FAILSAFE_OFF_ON_BOOT
   ot.setChEnable(false);
@@ -333,7 +349,11 @@ void setup() {
   pinMode(OT_OUT_PIN, OUTPUT);
   Serial.println(F("[dbg] pre ot.begin"));
 #endif
-  ot.begin();
+  if (!ot_safe_mode) {
+    ot.begin();
+  } else {
+    HCS_LOG("ot", "begin skipped (safe-mode)");
+  }
 #ifdef HCS_TEST_BOOT
   Serial.println(F("[dbg] post ot.begin"));
 #endif
@@ -453,12 +473,14 @@ void loop() {
 #ifdef HCS_TEST_BOOT
   static unsigned long last_tick = 0;
 #endif
-  HCS_MARK("ot.loop");
-  ot.loop();
+  if (!ot_safe_mode) {
+    HCS_MARK("ot.loop");
+    ot.loop();
+  }
 #ifndef HCS_TEST_BOOT
   HCS_MARK("sensors");
   sensors.loop();
-  syncSensorInject();
+  if (!ot_safe_mode) syncSensorInject();
 #endif
 
 #ifndef HCS_TEST_BOOT
@@ -496,7 +518,9 @@ void loop() {
 #endif
 
 #ifdef HCS_GW_ENABLE
-  if (gw_probing) {
+  if (ot_safe_mode) {
+    // skip all OT / gateway bus work
+  } else if (gw_probing) {
     // AUTO phase: keep boiler autonomy, listen on thermostat bus silently
     ot.poll();
     gw.probeLoop();
@@ -527,8 +551,10 @@ void loop() {
     ot.poll();  // autonomous ~1 Hz master cycle (injects sensors inside poll)
   }
 #else
-  HCS_MARK("ot.poll");
-  ot.poll();  // autonomous ~1 Hz master cycle (master-only builds)
+  if (!ot_safe_mode) {
+    HCS_MARK("ot.poll");
+    ot.poll();  // autonomous ~1 Hz master cycle (master-only builds)
+  }
 #endif
 
 #ifdef HCS_TEST_BOOT

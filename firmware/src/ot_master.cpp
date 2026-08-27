@@ -11,30 +11,42 @@ static constexpr uint8_t kOtLinkFailThreshold = 3;
 static constexpr unsigned long kOtLinkHoldMs = 5000;
 
 // ---------------------------------------------------------------------------
-// Static IRAM ISR — DO NOT use OpenTherm::begin() with a C++ lambda.
-// On ESP32-C3 the library's FunctionalInterrupt path (std::function in ISR)
-// causes random PANICs under bus noise / Wi-Fi load. A plain C function
-// pointer + IRAM_ATTR is safe on ESP8266 and all ESP32 variants.
+// Static IRAM ISR — DO NOT use OpenTherm::begin() with a C++ lambda
+// (FunctionalInterrupt / std::function). On ESP32-C3 that panics under load.
+//
+// The entire call chain must be IRAM-resident:
+//   ot_master_isr (C, IRAM) → handleInterruptIsr (method, IRAM)
+//                           → OpenTherm::handleInterrupt (IRAM)
+// A non-IRAM C++ method wrapper was enough to panic-loop before Wi‑Fi
+// (board looked "dead" on the LAN).
 // ---------------------------------------------------------------------------
-static OtMaster* s_ot_master = nullptr;
+static OtMaster* volatile s_ot_master = nullptr;
 
 #if defined(ESP8266)
 void ICACHE_RAM_ATTR ot_master_isr() {
 #else
 void IRAM_ATTR ot_master_isr() {
 #endif
-  if (s_ot_master) s_ot_master->handleInterruptIsr();
+  OtMaster* m = s_ot_master;
+  if (m) m->handleInterruptIsr();
 }
 
 OtMaster::OtMaster(int in_pin, int out_pin) : ot_(in_pin, out_pin) {}
 
-void OtMaster::handleInterruptIsr() {
+void IRAM_ATTR OtMaster::handleInterruptIsr() {
   ot_.handleInterrupt();
 }
 
 void OtMaster::begin() {
   s_ot_master = this;
+  // Put the bus idle BEFORE attaching the ISR so activateBoiler's 1 s wait
+  // does not run with a live interrupt handler (boot race on C3).
+  pinMode(OT_IN_PIN, INPUT);
+  pinMode(OT_OUT_PIN, OUTPUT);
+  digitalWrite(OT_OUT_PIN, HIGH);  // idle line
+  delay(200);
   // C function-pointer begin() — never the no-arg / std::function overload.
+  // (begin() will pinMode + activateBoiler again; that is fine.)
   ot_.begin(ot_master_isr);
   HCS_LOG("ot", "ISR attached (static IRAM) in=%d out=%d", OT_IN_PIN,
           OT_OUT_PIN);

@@ -56,8 +56,12 @@ class OtMaster {
   /** Call very frequently from loop (handles OT response timing). */
   void loop();
 
-  /** IRAM-safe path used by the static C ISR (do not call from app code). */
-  void handleInterruptIsr();
+  /**
+   * IRAM-safe path used by the static C ISR only.
+   * MUST stay IRAM_ATTR — a flash-resident wrapper called from IRQ panics
+   * on ESP32-C3 (that brick-looped 1.4.6 before Wi‑Fi came up).
+   */
+  void IRAM_ATTR handleInterruptIsr();
 
   void setChEnable(bool on);
   void setDhwEnable(bool on);

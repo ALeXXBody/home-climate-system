@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.4.7
+
+**Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.7)
+
+### Unbrick ESP32-C3 (1.4.6 dead-on-LAN)
+- **1.4.6 bug:** `handleInterruptIsr()` was not `IRAM_ATTR` — ISR jumped to flash → immediate PANIC loop before Wi‑Fi (no ping)
+- **Fix:** full IRAM ISR chain; idle bus before attach
+- **OT safe-mode:** after ≥3 unclean boots, skip OpenTherm so Wi‑Fi/HTTP/OTA still work
+
+**Recovery:** USB flash `firmware-lolin_c3_mini.bin` (OTA impossible while dead).
+
 ## v1.4.6
 
 **Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.6)
