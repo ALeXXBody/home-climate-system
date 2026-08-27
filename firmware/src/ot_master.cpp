@@ -40,11 +40,14 @@ void OtMaster::begin() {
 }
 
 void OtMaster::sendBit_(bool high) {
-  // Library-identical: high bit = drive ACTIVE 500 µs then IDLE 500 µs.
+  // Mask IRQs per bit (1 ms windows): a WiFi ISR stretching a half-bit
+  // corrupts the frame on the wire and the boiler stops answering.
+  noInterrupts();
   digitalWrite(OT_OUT_PIN, high ? LOW : HIGH);
   delayMicroseconds(500);
   digitalWrite(OT_OUT_PIN, high ? HIGH : LOW);
   delayMicroseconds(500);
+  interrupts();
 }
 
 unsigned long OtMaster::receiveFrame_(unsigned long timeout_ms) {
@@ -116,7 +119,9 @@ unsigned long OtMaster::xchg_(unsigned long req) {
   yield();
 
   // ---- RX: polled decode (task context; no ISR exists) ----
-  unsigned long resp = receiveFrame_(150);
+  // OpenTherm allows the slave up to 800 ms to answer; the original 150 ms
+  // timeout was a rewrite regression that showed up as link flapping.
+  unsigned long resp = receiveFrame_(400);
   ot_log.record(req, resp, last_status_);
   yield();
   return resp;

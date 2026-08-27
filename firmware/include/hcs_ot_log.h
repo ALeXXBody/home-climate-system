@@ -51,27 +51,27 @@ class OtLog {
     count_ = 0;
   }
 
-  static const __FlashStringHelper* typeName(uint8_t mt) {
+  static const char* typeName(uint8_t mt) {
     switch ((OpenThermMessageType)mt) {
-      case OpenThermMessageType::READ_DATA:    return F("READ");
-      case OpenThermMessageType::WRITE_DATA:   return F("WRITE");
-      case OpenThermMessageType::INVALID_DATA: return F("INVAL");
-      case OpenThermMessageType::RESERVED:     return F("RSV");
-      case OpenThermMessageType::READ_ACK:     return F("R-ACK");
-      case OpenThermMessageType::WRITE_ACK:    return F("W-ACK");
-      case OpenThermMessageType::DATA_INVALID: return F("D-INV");
-      case OpenThermMessageType::UNKNOWN_DATA_ID: return F("UNK-ID");
-      default:                                 return F("UNK");
+      case OpenThermMessageType::READ_DATA:    return "READ";
+      case OpenThermMessageType::WRITE_DATA:   return "WRITE";
+      case OpenThermMessageType::INVALID_DATA: return "INVAL";
+      case OpenThermMessageType::RESERVED:     return "RSV";
+      case OpenThermMessageType::READ_ACK:     return "R-ACK";
+      case OpenThermMessageType::WRITE_ACK:    return "W-ACK";
+      case OpenThermMessageType::DATA_INVALID: return "D-INV";
+      case OpenThermMessageType::UNKNOWN_DATA_ID: return "UNK-ID";
+      default:                                 return "UNK";
     }
   }
 
-  static const __FlashStringHelper* statusName(uint8_t st) {
+  static const char* statusName(uint8_t st) {
     switch ((OpenThermResponseStatus)st) {
-      case OpenThermResponseStatus::SUCCESS: return F("OK");
-      case OpenThermResponseStatus::INVALID: return F("BAD");
-      case OpenThermResponseStatus::TIMEOUT: return F("T/O");
-      case OpenThermResponseStatus::NONE:    return F("-");
-      default:                               return F("?");
+      case OpenThermResponseStatus::SUCCESS: return "OK";
+      case OpenThermResponseStatus::INVALID: return "BAD";
+      case OpenThermResponseStatus::TIMEOUT: return "T/O";
+      case OpenThermResponseStatus::NONE:    return "-";
+      default:                               return "?";
     }
   }
 
@@ -152,7 +152,12 @@ class OtLog {
 
     // Note: UNK-ID / T/O on optional sensors (Toutside/Tret) is normal when
     // the boiler has no outdoor/return probe — use 1-Wire roles instead.
-    snprintf(out, len, "[%6lu.%02lus] %-5s %-9s %04X -> %s %-9s %04X %s | %s",
+    //
+    // Conversions and args pair one-to-one. v1.4.1–1.4.10 shipped a
+    // misordered pair (sid ↔ resp-hex) that fed an INTEGER to %s: snprintf
+    // read a "string" from a frame-derived address and load-faulted →
+    // PANIC on every /api/otlog request once real OT frames existed.
+    snprintf(out, len, "[%6lu.%02lus] %-5s %-9s %04X -> %s %-5s %-9s %04X | %s",
              (unsigned long)(e.t_ms / 1000),
              (unsigned long)((e.t_ms % 1000) / 10),
              typeName((uint8_t)OpenTherm::getMessageType(e.req)),

@@ -508,6 +508,7 @@ void loop() {
 #ifndef HCS_TEST_BOOT
   HCS_MARK("net.loop");
   net.loop();
+  HCS_MARK("wc.sync");
   syncWcFromDevice();
 
   if (WiFi.status() != WL_CONNECTED) {

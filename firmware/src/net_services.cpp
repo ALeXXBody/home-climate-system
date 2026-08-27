@@ -545,6 +545,7 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   });
 
   server.on("/api/otlog", HTTP_GET, [this]() {
+    HCS_LOG("http", "GET /api/otlog");
     bool clear = server.hasArg("clear");
     if (clear) ot_.ot_log.clear();
     JsonDocument doc;
@@ -562,6 +563,7 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   });
 
   server.on("/api/log", HTTP_GET, [this]() {
+    HCS_LOG("http", "GET /api/log");
     if (server.hasArg("clear")) hcs::g_log.clear();
     JsonDocument doc;
     JsonArray arr = doc["lines"].to<JsonArray>();
@@ -578,6 +580,7 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   });
 
   server.on("/api/status", HTTP_GET, [this]() {
+    HCS_LOG("http", "GET /api/status");
     const OtSnapshot& s = ot_.snap();
     JsonDocument doc;
     doc["node_id"] = node_id_;
@@ -879,6 +882,7 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   });
 
   server.on("/api/sensors", HTTP_GET, [this]() {
+    HCS_LOG("http", "GET /api/sensors");
     HcsSettings& cfgR = shared_ ? *shared_ : settings_;
     JsonDocument d;
     d["enabled"] = sensors_ ? sensors_->enabled() : false;
@@ -1103,16 +1107,20 @@ void NetServices::beginArduinoOta(const HcsSettings& settings,
 }
 
 void NetServices::loop() {
+  // Fine-grained breadcrumbs: the last RTC mark after a panic now names the
+  // exact call that was running (the coarse net.loop mark hid the culprit).
+  HCS_MARK("net.rb");
   otaRollbackTick();
-  httpSelfProbeTick_();
   if (reboot_pending_ && millis() > reboot_at_ms_) {
     HCS_LOG("reboot", "executing now (%s)", last_reboot_reason_.c_str());
     delay(80);
     ESP.restart();
   }
+  HCS_MARK("net.http");
   if (http_started_) {
     server.handleClient();
   }
+  HCS_MARK("net.aota");
   ArduinoOTA.handle();
 }
 
@@ -1363,42 +1371,3 @@ void NetServices::otaRollbackTick() {
 }
 
 
-// ── HTTP self-probe (diagnostic only — never reboots) ────────────────────
-// Connecting to ourselves from the same superloop that serves HTTP can
-// false-fail while the stack is busy, then scheduleReboot() caused a
-// SW_RESET loop (~1–2 min uptime). From v1.4.4 we only LOG failures.
-constexpr unsigned long HTTP_PROBE_INTERVAL_MS = 120000;
-
-void NetServices::httpSelfProbeTick_() {
-  if (!http_started_ || ota_busy_ || reboot_pending_) return;
-  if (millis() - http_probe_ms_ < HTTP_PROBE_INTERVAL_MS) return;
-  http_probe_ms_ = millis();
-
-  bool ok = false;
-  WiFiClient c;
-  if (c.connect(WiFi.localIP(), HTTP_PORT)) {
-    c.print(F("GET /api/status HTTP/1.0\r\nHost: hcs\r\n\r\n"));
-    const unsigned long deadline = millis() + 1500;
-    String line;
-    while (millis() < deadline) {
-      while (c.available()) {
-        char ch = (char)c.read();
-        if (ch == '\n') break;
-        line += ch;
-      }
-      if (line.length()) break;
-      delay(1);
-      yield();
-    }
-    ok = line.startsWith("HTTP/1");
-    c.stop();
-  }
-  if (ok) {
-    if (http_probe_fail_)
-      HCS_LOG("http", "self-probe OK (after %u fails)", http_probe_fail_);
-    http_probe_fail_ = 0;
-  } else {
-    http_probe_fail_ = (uint8_t)(http_probe_fail_ + 1);
-    HCS_LOG("http", "self-probe fail #%u (no reboot)", http_probe_fail_);
-  }
-}
