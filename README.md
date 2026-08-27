@@ -1,3 +1,7 @@
+<p align="center">
+  <a href="https://buymeacoffee.com/ALeXXBody" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
+</p>
+
 # Home Climate System
 
 [![CI](https://github.com/ALeXXBody/home-climate-system/actions/workflows/ci.yml/badge.svg)](https://github.com/ALeXXBody/home-climate-system/actions/workflows/ci.yml)
