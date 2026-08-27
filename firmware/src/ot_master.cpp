@@ -287,15 +287,24 @@ void OtMaster::doPoll_() {
     snap_.valid_oem = true;
   }
 
-  // Outdoor temperature first (MsgID 27) so weather comp can use it this cycle
+  // Outdoor temperature first (MsgID 27) so weather comp can use it this cycle.
+  // Many boilers have no outdoor probe → TIMEOUT / UNKNOWN_DATA_ID. That is
+  // normal — leave the field alone so a 1-Wire "outdoor" role can fill it.
   unsigned long req = OpenTherm::buildRequest(
       OpenThermMessageType::READ_DATA, OpenThermMessageID::Toutside, 0);
   unsigned long resp = xchg_(req);
-  if (ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS) {
-    snap_.outdoor_temp = OpenTherm::getFloat(resp);
+  if (ot_.getLastResponseStatus() == OpenThermResponseStatus::SUCCESS &&
+      OpenTherm::getMessageType(resp) == OpenThermMessageType::READ_ACK &&
+      OpenTherm::getDataID(resp) == OpenThermMessageID::Toutside) {
+    float ot_out = OpenTherm::getFloat(resp);
+    // Reject library-zero / nonsense; real outdoor can be negative.
+    if (!isnan(ot_out) && ot_out > -40.0f && ot_out < 60.0f &&
+        !(ot_out == 0.0f && (resp & 0xFFFF) == 0)) {
+      snap_.outdoor_temp = ot_out;
+    }
   }
 
-  // Outdoor inject before WC so the curve sees 1-Wire outdoor.
+  // Outdoor inject before WC so the curve sees 1-Wire outdoor (overrides OT).
   applyInject_();
 
   // Effective flow target. Failsafe bypasses weather compensation so the
@@ -326,7 +335,8 @@ void OtMaster::doPoll_() {
   if (okRead() && !isnan(t) && t > 0.0f) snap_.flow_temp = t;
 
   t = ot_.getReturnTemperature();
-  if (okRead() && !isnan(t) && t > 0.0f) snap_.return_temp = t;
+  // Tret unsupported on many boilers → leave previous / NaN for 1-Wire inject.
+  if (okRead() && !isnan(t) && t > 0.0f && t < 110.0f) snap_.return_temp = t;
 
   t = ot_.getModulation();
   if (okRead() && !isnan(t)) snap_.modulation = t;
@@ -334,7 +344,7 @@ void OtMaster::doPoll_() {
   t = ot_.getDHWTemperature();
   if (okRead() && !isnan(t) && t > 0.0f) snap_.dhw_temp = t;
 
-  // Re-apply inject AFTER OT return read so 1-Wire return role is not wiped.
+  // Re-apply inject AFTER OT return read so 1-Wire outdoor/return roles win.
   applyInject_();
 
   // Max relative modulation setting (MsgID 14)

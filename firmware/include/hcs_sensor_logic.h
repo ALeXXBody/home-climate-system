@@ -3,7 +3,7 @@
  * Portable sensor-routing logic for Home Climate System (host-testable).
  *
  * 1-Wire (DS18B20) probes can backfill values some boilers don't report
- * (outdoor temp MsgID 27, return temp MsgID 25). This module owns:
+ * (outdoor temp MsgID 27 / Toutside, return temp MsgID 28 / Tret). This module owns:
  *   - DS18B20 address <-> hex-string codec (settings storage format)
  *   - role assignment validation
  *   - the override rule: a valid, fresh sensor reading wins over the

@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.4.1
+
+**Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.1)
+
+### Fixes
+- **OT console MsgID labels** were wrong (e.g. ID 25 shown as `TboilerUB` instead of `Tboiler`, ID 18 as `Tout` instead of CH pressure). Console looked full of “errors” when the boiler simply had no outdoor/return probe.
+- Outdoor OT read: only accept a real READ-ACK; leave field alone on T/O / UNK-ID so **1-Wire outdoor** can fill it.
+- Return OT read: leave NaN on failure so **1-Wire return** inject is not wiped by a failed OT frame.
+- Payload formatting: flag/OEM IDs print hi/lo, not a fake °C float.
+
+### Sensors (unchanged behaviour, clarified)
+- 1-Wire role **outdoor** (Tout) → snapshot + MQTT `outdoor_temp` + weather compensation
+- 1-Wire role **return** (Tret) → snapshot + MQTT `return_temp` (HCC gas ΔT / condense)
+- HCC uses those MQTT values as the boiler outdoor/return source
+
 ## v1.4.0
 
 **Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.0)
