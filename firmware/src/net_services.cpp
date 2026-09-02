@@ -46,6 +46,43 @@ bool NetServices::beginWifi(HcsSettings& settings) {
   settings_ = settings;
   WiFi.mode(WIFI_STA);
 
+  // WiFi event logging — the 5.5-day silent WiFi drop on .195 was
+  // undiagnosable because disconnects/reconnects never reached the Log.
+  // Event APIs differ per platform (ESP32 vs ESP8266 core).
+#if defined(ESP32)
+  WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+    switch (event) {
+      case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+        HCS_LOG("wifi", "DISCONNECTED reason=%u — reconnecting",
+                info.wifi_sta_disconnected.reason);
+        break;
+      case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+        HCS_LOG("wifi", "associated");
+        break;
+      case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+        HCS_LOG("wifi", "up ip=%s rssi=%d", WiFi.localIP().toString().c_str(),
+                WiFi.RSSI());
+        break;
+      default:
+        break;  // scan/start/stop noise stays out of the log
+    }
+  });
+#elif defined(ESP8266)
+  static WiFiEventHandler s_disc = WiFi.onStationModeDisconnected(
+      [](const WiFiEventStationModeDisconnected& e) {
+        HCS_LOG("wifi", "DISCONNECTED reason=%u — reconnecting", e.reason);
+      });
+  static WiFiEventHandler s_got = WiFi.onStationModeGotIP(
+      [](const WiFiEventStationModeGotIP& e) {
+        HCS_LOG("wifi", "up ip=%s rssi=%d", e.ip.toString().c_str(),
+                WiFi.RSSI());
+      });
+  static WiFiEventHandler s_conn = WiFi.onStationModeConnected(
+      [](const WiFiEventStationModeConnected&) {
+        HCS_LOG("wifi", "associated");
+      });
+#endif
+
   // Unique identity: two devices with the same name/hostname confuse DHCP
   // displays and mDNS (audit follow-up). Suffix = last 4 MAC hex chars.
   String mac = WiFi.macAddress();
