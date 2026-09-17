@@ -13,6 +13,55 @@
 void setUp(void) {}
 void tearDown(void) {}
 
+// ── Bulletproof Wi-Fi re-association decision logic (pure, testable) ──────
+// Factored from bulletproofWifiTick() so escalation/counter logic runs on-host.
+struct WfiReconDecision {
+  bool should_reconnect;
+  bool should_force_full;
+};
+
+inline WfiReconDecision wifi_recon_decide(unsigned int fail_count) {
+  constexpr unsigned int FORCE_N = 6;
+  if (fail_count == 0) return {false, false};
+  if (fail_count == 1) return {true, false};   // soft reconnect
+  if (fail_count % FORCE_N == 0) return {false, true};  // forced full re-assoc
+  return {false, false};  // passive wait
+}
+
+void test_wifi_recon_first_fail_soft(void) {
+  auto d = wifi_recon_decide(1);
+  TEST_ASSERT_TRUE(d.should_reconnect);
+  TEST_ASSERT_FALSE(d.should_force_full);
+}
+
+void test_wifi_recon_intermediate_passive(void) {
+  for (unsigned int i = 2; i < 6; i++) {
+    auto d = wifi_recon_decide(i);
+    TEST_ASSERT_FALSE(d.should_reconnect);
+    TEST_ASSERT_FALSE(d.should_force_full);
+  }
+}
+
+void test_wifi_recon_forced_at_sixth(void) {
+  for (unsigned int i = 6; i <= 36; i += 6) {
+    auto d = wifi_recon_decide(i);
+    TEST_ASSERT_TRUE(d.should_force_full);
+    TEST_ASSERT_FALSE(d.should_reconnect);
+  }
+}
+
+void test_wifi_recon_reset_after_reconnect(void) {
+  auto d = wifi_recon_decide(0);
+  TEST_ASSERT_FALSE(d.should_reconnect);
+  TEST_ASSERT_FALSE(d.should_force_full);
+}
+
+void test_wifi_recon_seven_is_passive(void) {
+  auto d = wifi_recon_decide(7);
+  TEST_ASSERT_FALSE(d.should_force_full);
+  TEST_ASSERT_FALSE(d.should_reconnect);
+}
+
 static HcsCommandResult parse(const char* topic, const char* payload) {
   return hcs_parse_command(topic, payload);
 }
@@ -687,5 +736,10 @@ int main(void) {
   RUN_TEST(test_fs_ch_demand);
   RUN_TEST(test_gw_override_parse);
   RUN_TEST(test_gw_topics_do_not_shadow_flow_setpoint);
+  RUN_TEST(test_wifi_recon_first_fail_soft);
+  RUN_TEST(test_wifi_recon_intermediate_passive);
+  RUN_TEST(test_wifi_recon_forced_at_sixth);
+  RUN_TEST(test_wifi_recon_reset_after_reconnect);
+  RUN_TEST(test_wifi_recon_seven_is_passive);
   return UNITY_END();
 }
