@@ -79,6 +79,8 @@ bool SettingsStore::load(HcsSettings& out) {
   out.mqtt_prefix = prefs.getString("mqtt_prefix", "hcs");
   out.device_name = prefs.getString("dev_name", "Home Climate System");
   out.ota_password = prefs.getString("ota_pass", "");
+  out.led_enable = prefs.getBool("led_en", true);
+  out.led_brightness = prefs.getUChar("led_br", 64);
   out.wc_enable = prefs.getBool("wc_en", false);
   out.wc_t_out_ref = prefs.getFloat("wc_ref", 18.0f);
   out.wc_t_out_design = prefs.getFloat("wc_dsn", -10.0f);
@@ -208,6 +210,8 @@ bool SettingsStore::save(const HcsSettings& in) {
   prefs.putString("mqtt_prefix", in.mqtt_prefix);
   prefs.putString("dev_name", in.device_name);
   prefs.putString("ota_pass", in.ota_password);
+  prefs.putBool("led_en", in.led_enable);
+  prefs.putUChar("led_br", in.led_brightness);
   prefs.putBool("wc_en", in.wc_enable);
   prefs.putFloat("wc_ref", in.wc_t_out_ref);
   prefs.putFloat("wc_dsn", in.wc_t_out_design);

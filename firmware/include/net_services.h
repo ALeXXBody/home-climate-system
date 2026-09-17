@@ -44,6 +44,11 @@ class NetServices {
     ota_report_ = std::move(fn);
   }
 
+  /** LED command handler ("on"/"off"/brightness) — wired to main.cpp. */
+  void setLedFn(std::function<void(const String& payload)> fn) {
+    led_fn_ = std::move(fn);
+  }
+
   /**
    * Reporter invoked with the masked settings snapshot whenever settings
    * change (portal or MQTT). main.cpp wires it to the retained topic
@@ -119,6 +124,7 @@ class NetServices {
   void otaMarkTarget(const String& url);
   void otaRollbackTick();
   std::function<void(const String& json)> ota_report_;
+  std::function<void(const String& payload)> led_fn_;
   std::function<void(const String& json)> cfg_report_;
 
   void otaReport(const String& state, int progress, const String& error);

@@ -188,6 +188,9 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
     case HCS_CMD_SETTINGS:
       if (settings_cb_ && payload.length()) settings_cb_(payload);
       break;
+    case HCS_CMD_LED:
+      if (led_cb_ && payload.length()) led_cb_(payload);
+      break;
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
     case HCS_CMD_GW_MODE:
       if (gw_mode_cb_) gw_mode_cb_((uint8_t)r.int_value);

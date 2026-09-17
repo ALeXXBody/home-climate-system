@@ -375,6 +375,22 @@ publishes a named sensor to Home Assistant. Health is re-checked every poll
 <label>OTA password (blank = none)</label><input id=s_otapass maxlength=31 type=password autocomplete=new-password placeholder=(unchanged)>
 <button class=a onclick="saveSettings()">Save &amp; reboot</button>
 <div id=msg></div>
+</div>
+<div class=card style=margin-top:10px>
+<label>Status LED</label>
+<div class=row>
+<button class=a onclick="ledSet('on')">On</button>
+<button class=g onclick="ledSet('off')">Off</button>
+<span style="margin-left:auto">state: <b id=s_led>&mdash;</b></span></div>
+<label style="margin-top:8px">Brightness <span id=s_led_b_label>&mdash;</span></label>
+<div class=row>
+<input id=s_led_b type=range min=1 max=255 value=64 style="flex:1"
+ onchange="ledSet(String(this.value))" oninput="document.getElementById('s_led_b_label').textContent=''+this.value">
+<span>(applies on release)</span></div>
+<p style="color:#999;font-size:.8rem;margin-top:4px">
+Onboard LED patterns: green OK &middot; amber no OT link &middot; blue Wi-Fi
+&middot; red failsafe. Off = completely dark.</p>
+</div>
 </div></section>
 <section id=t-system>
 <div class=card><table>
@@ -555,9 +571,18 @@ async function loadSettings(){
  try{const c=await jget('/api/settings');
  s_name.value=c.device_name||'';s_host.value=c.mqtt_host||'';s_port.value=c.mqtt_port||1883;
  s_user.value=c.mqtt_user||'';s_prefix.value=c.mqtt_prefix||'hcs';
+ s_led.textContent=c.led_enable?'on':'off';
+ s_led_b.value=c.led_brightness||64;
+ s_led_b_label.textContent=s_led_b.value;
  }catch(e){}
  s_pass.value='';s_otapass.value='';
 }
+function ledSet(v){jpost('/api/control',{led:v}).then(async()=>{
+ try{const c=await jget('/api/settings');
+  s_led.textContent=v==='off'?'off':(c.led_enable?'on':'on');
+  if(v!=='off'){s_led_b.value=c.led_brightness||64;s_led_b_label.textContent=s_led_b.value;}
+ }catch(e){}
+})}
 async function otLog(){try{const r=await fetch('/api/otlog');const j=await r.json();$('otlog').textContent=(j.lines||[]).join('\n')||'(empty — waiting for frames)';}catch(e){$('otlog').textContent='error: '+e;}}
 async function saveSettings(){
  const b={device_name:s_name.value,mqtt_host:s_host.value,mqtt_port:+s_port.value,
@@ -798,6 +823,13 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
       return;
     }
     if (!d["ch_enable"].isNull()) ot_.setChEnable(d["ch_enable"].as<bool>());
+    if (!d["led"].isNull() && led_fn_) {
+      if (d["led"].is<const char*>()) {
+        led_fn_(String(d["led"].as<const char*>()));
+      } else if (d["led"].is<float>() || d["led"].is<int>()) {
+        led_fn_(String(d["led"].as<int>(), 10));
+      }
+    }
     if (!d["dhw_enable"].isNull()) ot_.setDhwEnable(d["dhw_enable"].as<bool>());
     if (!d["flow_setpoint"].isNull())
       ot_.setFlowSetpoint(constrain(d["flow_setpoint"].as<float>(), 20.0f, 90.0f));
@@ -833,6 +865,9 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   });
 
   server.on("/api/settings", HTTP_GET, [this]() {
+    // Read the live settings (LED toggles via /api/control mutate the
+    // shared instance in main.cpp; our member copy is taken at boot only).
+    const HcsSettings& live = shared_ ? *shared_ : settings_;
     auto esc = [](const String& v) {
       String o;
       o.reserve(v.length() + 8);
@@ -847,14 +882,16 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     };
     auto isSet = [](const String& v) { return v.length() > 0; };
     String j = "{";
-    j += "\"device_name\":\"" + esc(settings_.device_name) + "\",";
-    j += "\"mqtt_host\":\"" + esc(settings_.mqtt_host) + "\",";
-    j += "\"mqtt_port\":" + String(settings_.mqtt_port) + ",";
-    j += "\"mqtt_user\":\"" + esc(settings_.mqtt_user) + "\",";
-    j += "\"mqtt_user_set\":" + String(isSet(settings_.mqtt_user) ? "true" : "false") + ",";
-    j += "\"mqtt_prefix\":\"" + esc(settings_.mqtt_prefix) + "\",";
+    j += "\"device_name\":\"" + esc(live.device_name) + "\",";
+    j += "\"mqtt_host\":\"" + esc(live.mqtt_host) + "\",";
+    j += "\"mqtt_port\":" + String(live.mqtt_port) + ",";
+    j += "\"mqtt_user\":\"" + esc(live.mqtt_user) + "\",";
+    j += "\"mqtt_user_set\":" + String(isSet(live.mqtt_user) ? "true" : "false") + ",";
+    j += "\"mqtt_prefix\":\"" + esc(live.mqtt_prefix) + "\",";
+    j += "\"led_enable\":" + String(live.led_enable ? "true" : "false") + ",";
+    j += "\"led_brightness\":" + String(live.led_brightness) + ",";
     j += "\"ota_password_set\":" +
-         String(settings_.ota_password.length() ? "true" : "false");
+         String(live.ota_password.length() ? "true" : "false");
     j += "}";
     server.send(200, "application/json", j);
   });
@@ -1275,6 +1312,11 @@ bool NetServices::applySettingsJson(const String& json) {
     settings_.mqtt_pass = String(v).substring(0, 31);
   if ((v = d["mqtt_prefix"] | (const char*)nullptr))
     settings_.mqtt_prefix = hcs_trim(v).substring(0, 15);
+  if (d["led_enable"].is<bool>()) settings_.led_enable = d["led_enable"].as<bool>();
+  if (d["led_brightness"].is<int>()) {
+    int b = d["led_brightness"].as<int>();
+    settings_.led_brightness = (uint8_t)constrain(b, 1, 255);
+  }
   if ((v = d["ota_password"] | (const char*)nullptr))
     settings_.ota_password = String(v).substring(0, 31);
 
