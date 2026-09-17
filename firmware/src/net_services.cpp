@@ -46,6 +46,24 @@ bool NetServices::beginWifi(HcsSettings& settings) {
   settings_ = settings;
   WiFi.mode(WIFI_STA);
 
+  // ★ Bulletproof Wi-Fi: driver properties set BEFORE any association so
+  // the radio can't drop into modem-sleep during the first few seconds of
+  // association (a known silent-drop trigger on bare-metal ESP32-C3).
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
+#if defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(HCS_STRICT_TX)
+  // Back to full TX power: the board now has a separate 1 A LDO powering
+  // the DIYLess shield, so the ESP32's own rail is clean and there's no
+  // brownout risk from TX bursts. 17 dBm cap was historically to protect
+  // weak rails — with the separate-LDO hardware that concern is resolved.
+  // A stronger TX also improves the router hearing the board, which
+  // matters during high-traffic periods (OTA, MQTT burst, discovery).
+  if (WiFi.getTxPower() < WIFI_POWER_19_5dBm) {
+    WiFi.setTxPower(WIFI_POWER_19_5dBm);
+    HCS_LOG("wifi", "TX power raised to 19.5 dBm");
+  }
+#endif
+
   // WiFi event logging — the 5.5-day silent WiFi drop on .195 was
   // undiagnosable because disconnects/reconnects never reached the Log.
   // Event APIs differ per platform (ESP32 vs ESP8266 core).
@@ -1143,9 +1161,45 @@ void NetServices::beginArduinoOta(const HcsSettings& settings,
   ArduinoOTA.begin();
 }
 
+// ── Bulletproof Wi-Fi: active re-association with escalation ─────────
+// The original main.cpp does a passive WiFi.reconnect() every 15 s, but
+// the ESP32 Wi-Fi stack can stop trying after repeated dips. This tick
+// escalates: passive reconnect → full dissociate+begin, and always logs.
+constexpr unsigned long WIFI_RECON_SOFT_MS = 10000;    // 10 s between attempts
+constexpr unsigned long WIFI_RECON_FORCED_MS = 60000;  // force full re-associate after 60 s offline
+constexpr unsigned int  WIFI_FORCE_AFTER_N = 6;        // N soft attempts → force
+
+void NetServices::bulletproofWifiTick() {
+  if (WiFi.status() == WL_CONNECTED) {
+    wifi_fail_count_ = 0;
+    wifi_force_count_ = 0;
+    return;  // healthy
+  }
+  // Debounce tick (max once per second to not thrash the Wi-Fi stack).
+  static unsigned long last_tick = 0;
+  if (millis() - last_tick < 1000) return;
+  last_tick = millis();
+
+  wifi_fail_count_++;
+  if (wifi_fail_count_ % WIFI_FORCE_AFTER_N == 0) {
+    wifi_force_count_++;
+    HCS_LOG("wifi", "offline %u s — forcing full re-association (attempt %u)",
+            wifi_fail_count_, wifi_force_count_);
+    // Superset of reconnect(): drops association + re-associates with
+    // fresh credentials from NVS.
+    WiFi.disconnect();
+    delay(100);
+    WiFi.begin();  // retries with stored credentials
+    return;
+  }
+  if (wifi_fail_count_ == 1) {
+    // First soft attempt via reconnect() — cheap, doesn't break portal.
+    HCS_LOG("wifi", "offline — soft reconnect");
+    WiFi.reconnect();
+  }
+}
+
 void NetServices::loop() {
-  // Fine-grained breadcrumbs: the last RTC mark after a panic now names the
-  // exact call that was running (the coarse net.loop mark hid the culprit).
   HCS_MARK("net.rb");
   otaRollbackTick();
   if (reboot_pending_ && millis() > reboot_at_ms_) {

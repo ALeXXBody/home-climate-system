@@ -64,6 +64,10 @@ class NetServices {
   bool applySettingsJson(const String& json);
 
   bool wifiConnected() const;
+  /** Active Wi-Fi re-association with escalation; safe to call from loop. */
+  void bulletproofWifiTick();
+  unsigned int wifi_fail_count_ = 0;
+  unsigned int wifi_force_count_ = 0;
   String localIp() const;
 
   /** Optional: expose live 1-Wire probes to the Sensors tab. */
