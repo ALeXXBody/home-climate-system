@@ -242,6 +242,28 @@ static void applyGwRole(bool gateway) {
 
 StatusLed status_led;  // diagnostic patterns — see hcs_status_led.h
 
+/** LED command from MQTT or web UI: "on"/"off" or brightness 1-255. */
+static void applyLedPayload(const String& payload) {
+  if (payload.isEmpty()) return;
+  if (payload.equalsIgnoreCase("on")) {
+    status_led.setEnabled(true);
+    settings.led_enable = true;
+  } else if (payload.equalsIgnoreCase("off")) {
+    status_led.setEnabled(false);
+    settings.led_enable = false;
+  } else {
+    long v = payload.toInt();
+    if (v < 1) v = 1;
+    if (v > 255) v = 255;
+    status_led.setBrightness((uint8_t)v);
+    settings.led_brightness = (uint8_t)v;
+  }
+  SettingsStore st;
+  st.begin();
+  st.save(settings);
+  HCS_LOG("led", "set: %s", payload.c_str());
+}
+
 // After this many consecutive PANIC/WDT boots, skip OpenTherm init so Wi‑Fi
 // + HTTP still come up and OTA recovery is possible (board was "dead" on LAN).
 static constexpr uint8_t kOtSafeModeUnclean = 3;
@@ -380,6 +402,8 @@ void setup() {
   Serial.println(F("[dbg] post store"));
 #else
   applyWcSettings(settings);
+  status_led.setEnabled(settings.led_enable);
+  status_led.setBrightness(settings.led_brightness);
   sensors.configure(settings.ow_enable, settings.ow_slots, hcs::kOwMaxSlots);
   if (HCS_ONEWIRE_PIN >= 0) sensors.begin();
   net.setSensors(&sensors);
@@ -427,11 +451,13 @@ void setup() {
   net.setMqttConnectedFn([] { return mqtt.connected(); });
   net.setSharedSettings(&settings);
   net.setFailsafeStatePtr(&fs_state);
+  net.setLedFn(applyLedPayload);
 
   mqtt.setNodeId(nodeId);
   mqtt.setDeviceInfo(settings.device_name, net.localIp());
   mqtt.onOtaUrl(onOtaUrl);
   mqtt.onSettings(onSettingsJson);
+  mqtt.onLed(applyLedPayload);
   net.setConfigReporter([](const String& j) { publishCfgSnapshot(); });
   // ensure the lambda above can reach the retained publisher even before
   // nodeId-dependent paths run: it calls publishCfgSnapshot directly.

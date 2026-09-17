@@ -39,6 +39,7 @@ enum HcsCommand {
   HCS_CMD_GW_MODE,
   HCS_CMD_GW_OVERRIDE_SETPOINT,
   HCS_CMD_SETTINGS,
+  HCS_CMD_LED,
 };
 
 struct HcsCommandResult {
@@ -127,6 +128,11 @@ inline HcsCommandResult hcs_parse_command(const char* topic, const char* payload
   if (hcs_ends_with(topic, "/settings")) {
     // JSON payload, same shape as POST /api/settings; caller applies.
     r.cmd = HCS_CMD_SETTINGS;
+    return r;
+  }
+  if (hcs_ends_with(topic, "/led")) {
+    // payload: "on" | "off" | number (brightness 1-255)
+    r.cmd = HCS_CMD_LED;
     return r;
   }
   if (hcs_ends_with(topic, "/failsafe_cfg")) {

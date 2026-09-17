@@ -54,6 +54,8 @@ class MqttBridge {
   void onOtaUrl(void (*cb)(const String& url)) { ota_cb_ = cb; }
   /** Settings push over MQTT: .../set/settings (partial JSON). */
   void onSettings(void (*cb)(const String& json)) { settings_cb_ = cb; }
+  /** Status LED command over MQTT: .../set/led ("on"/"off"/brightness 1-255). */
+  void onLed(void (*cb)(const String& payload)) { led_cb_ = cb; }
 
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   /** Gateway builds: expose live gateway + current mode string. */
@@ -90,6 +92,7 @@ class MqttBridge {
   unsigned long last_discovery_ms_ = 0;
   void (*ota_cb_)(const String&) = nullptr;
   void (*settings_cb_)(const String&) = nullptr;
+  void (*led_cb_)(const String&) = nullptr;
   void (*fs_cfg_cb_)(const String&) = nullptr;
   hcs::FsState* fs_state_ptr_ = nullptr;
   hcs::HcsSensors* sensors_ = nullptr;

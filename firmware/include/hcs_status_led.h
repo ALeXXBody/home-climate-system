@@ -85,14 +85,18 @@ class StatusLed {
     if (on == _on) return;
     _on = on;
     if (!on) { paint_off(); return; }
+#if defined(HCS_STATUS_LED_PIN) && !defined(HCS_STATUS_LED_DISABLE) && defined(ESP32)
     uint8_t r, g, b;
     colorOf_(_mode, r, g, b);
     uint8_t dim = (uint32_t)_brightness * _brightness / 255;
     neopixelWrite(_pin, (r * dim) >> 8, (g * dim) >> 8, (b * dim) >> 8);
+#endif
   }
 
   void paint_off() {
+#if defined(HCS_STATUS_LED_PIN) && !defined(HCS_STATUS_LED_DISABLE) && defined(ESP32)
     neopixelWrite(_pin, 0, 0, 0);
+#endif
   }
 
   bool     _enabled = true;

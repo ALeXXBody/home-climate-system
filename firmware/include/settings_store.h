@@ -29,6 +29,10 @@ struct HcsSettings {
   String ota_password = "";
   bool configured = false;
 
+  // Status LED (WS2812 on ESP32 boards; ignored elsewhere)
+  bool led_enable = true;
+  uint8_t led_brightness = 64;  // 1-255, default 25%
+
   // Weather compensation curve
   bool wc_enable = false;
   float wc_t_out_ref = 18.0f;
