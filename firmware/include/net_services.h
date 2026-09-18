@@ -73,6 +73,7 @@ class NetServices {
   void bulletproofWifiTick();
   unsigned int wifi_fail_count_ = 0;
   unsigned int wifi_force_count_ = 0;
+  unsigned long wifi_down_since_ms_ = 0;  // 0 = connected
   String localIp() const;
 
   /** Optional: expose live 1-Wire probes to the Sensors tab. */
