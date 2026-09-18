@@ -9,6 +9,7 @@
 #include "hcs_boiler_text.h"
 #include "hcs_ot_caps.h"
 #include "hcs_failsafe.h"
+#include "hcs_wifi_heal.h"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -61,6 +62,41 @@ void test_wifi_recon_seven_is_passive(void) {
   TEST_ASSERT_FALSE(d.should_force_full);
   TEST_ASSERT_FALSE(d.should_reconnect);
 }
+
+// ==================== Wi-Fi wedge self-heal (v1.5.6) ====================
+// 10 min solid outage + 2+ failed forced re-associations → clean restart.
+
+static inline bool heal_restart(bool connected, uint32_t down_ms,
+                                unsigned int force_count,
+                                bool reboot_pending) {
+  return hcs::wifi_heal_decide(connected, down_ms, force_count,
+                               reboot_pending) == hcs::WifiHealAction::RESTART;
+}
+
+void test_wifi_heal_connected_no_restart(void) {
+  TEST_ASSERT_FALSE(heal_restart(true, 9e5, 99, false));
+}
+
+void test_wifi_heal_reboot_pending_blocks_restart(void) {
+  TEST_ASSERT_FALSE(heal_restart(false, 9e5, 99, true));
+}
+
+void test_wifi_heal_short_outage_no_restart(void) {
+  // Just under the 10-minute threshold, with every escalation already tried
+  TEST_ASSERT_FALSE(heal_restart(false, 599999, 50, false));
+}
+
+void test_wifi_heal_needs_forced_attempts(void) {
+  // 10+ min down, but fewer than 2 full re-associations tried → keep trying
+  TEST_ASSERT_FALSE(heal_restart(false, 9e5, 0, false));
+  TEST_ASSERT_FALSE(heal_restart(false, 9e5, 1, false));
+}
+
+void test_wifi_heal_wedged_triggers_restart(void) {
+  TEST_ASSERT_TRUE(heal_restart(false, 600000, 2, false));
+  TEST_ASSERT_TRUE(heal_restart(false, 7200000, 50, false));
+}
+
 
 static HcsCommandResult parse(const char* topic, const char* payload) {
   return hcs_parse_command(topic, payload);
@@ -741,5 +777,10 @@ int main(void) {
   RUN_TEST(test_wifi_recon_forced_at_sixth);
   RUN_TEST(test_wifi_recon_reset_after_reconnect);
   RUN_TEST(test_wifi_recon_seven_is_passive);
+  RUN_TEST(test_wifi_heal_connected_no_restart);
+  RUN_TEST(test_wifi_heal_reboot_pending_blocks_restart);
+  RUN_TEST(test_wifi_heal_short_outage_no_restart);
+  RUN_TEST(test_wifi_heal_needs_forced_attempts);
+  RUN_TEST(test_wifi_heal_wedged_triggers_restart);
   return UNITY_END();
 }

@@ -5,6 +5,7 @@
 #include "hcs_boiler_text.h"
 #include "hcs_sys_log.h"
 #include "hcs_panic.h"
+#include "hcs_wifi_heal.h"
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
 #include "ot_gateway.h"
 #endif
@@ -794,6 +795,29 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     server.send(200, "application/json", j);
   });
 
+  // ── /api/wifi — radio diagnostics (read-only) ────────────────────────
+  // Purpose: A/B the Wi-Fi link from the board side without SSH to APs.
+  server.on("/api/wifi", HTTP_GET, [this]() {
+    JsonDocument d;
+    const bool connected = WiFi.status() == WL_CONNECTED;
+    d["connected"] = connected;
+    d["rssi"] = WiFi.RSSI();
+    d["bssid"] = WiFi.BSSIDstr();
+    d["channel"] = WiFi.channel();
+#if defined(ESP32)
+    d["txpower_dbm"] = WiFi.getTxPower() > 0 ? String((float)WiFi.getTxPower(), 1) : "n/a";
+#endif
+    d["down_since_s"] =
+        wifi_down_since_ms_ ? (millis() - wifi_down_since_ms_) / 1000UL : 0;
+    d["fail_count"] = wifi_fail_count_;
+    d["force_count"] = wifi_force_count_;
+    d["uptime"] = millis() / 1000UL;
+    String j;
+    j.reserve(measureJson(d) + 16);
+    serializeJson(d, j);
+    server.send(200, "application/json", j);
+  });
+
 
   // All mutating endpoints require the admin/OTA password when one is set.
   auto authOk = [this]() -> bool {
@@ -823,6 +847,29 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
       return;
     }
     if (!d["ch_enable"].isNull()) ot_.setChEnable(d["ch_enable"].as<bool>());
+#if defined(ESP32)
+    if (!d["txpower"].isNull()) {
+      // Test knob: accepted steps are the Arduino WiFi power constants.
+      const float want = d["txpower"].as<float>();
+      float best = 19.5f;
+      const float steps[] = {19.5, 19, 18.5, 17, 15, 13, 11, 8.5, 7, 5};
+      for (float s : steps)
+        if (abs(want - s) < abs(want - best)) best = s;
+      wifi_power_t e = WIFI_POWER_19_5dBm;
+      if (best == 19.5f) e = WIFI_POWER_19_5dBm;
+      else if (best == 19) e = WIFI_POWER_19dBm;
+      else if (best == 18.5f) e = WIFI_POWER_18_5dBm;
+      else if (best == 17) e = WIFI_POWER_17dBm;
+      else if (best == 15) e = WIFI_POWER_15dBm;
+      else if (best == 13) e = WIFI_POWER_13dBm;
+      else if (best == 11) e = WIFI_POWER_11dBm;
+      else if (best == 8.5f) e = WIFI_POWER_8_5dBm;
+      else if (best == 7) e = WIFI_POWER_7dBm;
+      else e = WIFI_POWER_5dBm;
+      WiFi.setTxPower(e);
+      HCS_LOG("wifi", "TX power set to %.1f dBm (runtime)", best);
+    }
+#endif
     if (!d["led"].isNull() && led_fn_) {
       if (d["led"].is<const char*>()) {
         led_fn_(String(d["led"].as<const char*>()));
@@ -1207,11 +1254,34 @@ constexpr unsigned long WIFI_RECON_FORCED_MS = 60000;  // force full re-associat
 constexpr unsigned int  WIFI_FORCE_AFTER_N = 6;        // N soft attempts → force
 
 void NetServices::bulletproofWifiTick() {
-  if (WiFi.status() == WL_CONNECTED) {
+  const bool connected = WiFi.status() == WL_CONNECTED;
+  if (connected) {
+    if (wifi_down_since_ms_ != 0) {
+      HCS_LOG("wifi", "recovered after %lu s",
+              (millis() - wifi_down_since_ms_) / 1000);
+    }
+    wifi_down_since_ms_ = 0;
     wifi_fail_count_ = 0;
     wifi_force_count_ = 0;
     return;  // healthy
   }
+  if (wifi_down_since_ms_ == 0) wifi_down_since_ms_ = millis();
+
+  // Self-heal: if the Wi-Fi stack stays dead for 10+ minutes while full
+  // re-associations also failed, the driver is wedged in a state that no
+  // in-loop call can clear — saw 11 h of this after the 1.5.5 OTA window.
+  // A clean restart needs ~90 s and self-heals the stack.
+  if (hcs::wifi_heal_decide(false, millis() - wifi_down_since_ms_,
+                            wifi_force_count_, reboot_pending_) ==
+      hcs::WifiHealAction::RESTART) {
+    wifi_down_since_ms_ = 0;
+    wifi_fail_count_ = 0;
+    wifi_force_count_ = 0;
+    HCS_LOG("wifi", "wedged long outage, forced re-associations failed — restart");
+    scheduleReboot(500, "wifi wedged");
+    return;
+  }
+
   // Debounce tick (max once per second to not thrash the Wi-Fi stack).
   static unsigned long last_tick = 0;
   if (millis() - last_tick < 1000) return;
@@ -1333,6 +1403,14 @@ bool NetServices::applySettingsJson(const String& json) {
 bool NetServices::startHttpUpdate(const String& url) {
   // Reentrancy guard: MQTT + HTTP fallback can both deliver the command.
   if (ota_busy_) return false;
+  // Reboot-race guard: a settings save / gw change / api/reboot that is
+  // already scheduled must win — an OTA racing it writes a fresh image
+  // mid-reboot and has wedged boards in the past (see 1.5.4→1.5.5 window).
+  if (reboot_pending_) {
+    HCS_LOG("ota", "rejected — reboot pending (%s)",
+            last_reboot_reason_.c_str());
+    return false;
+  }
   ota_busy_ = true;
   ota_last_progress_ = -1;
 
