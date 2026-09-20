@@ -8,6 +8,7 @@
 #include "hcs_wifi_heal.h"
 #if defined(ESP32)
 #include <esp_task_wdt.h>
+#include <esp_wifi.h>
 #include <Preferences.h>
 #endif
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
@@ -38,6 +39,33 @@ static WebServer server(HTTP_PORT);
 
 NetServices::NetServices(OtMaster& ot) : ot_(ot) {}
 
+#if defined(ESP32)
+// Apply after association. Order matters on C3: TX power BEFORE begin is a
+// no-op (STA not started); AFTER begin is what Wemos documents.
+static void hcsApplyStaRadio(bool full) {
+  esp_wifi_set_ps(WIFI_PS_NONE);
+#if defined(HCS_BOARD_LOLIN_C3_MINI)
+  // Official Wemos LOLIN C3 Mini v1.0: "You need set WIFI Tx Power to
+  // 8.5dBm to use WIFI" after WiFi.begin() — otherwise the antenna
+  // circuit oscillates and the PHY wedges.
+  // https://www.wemos.cc/en/latest/c3/c3_mini_1_0_0.html
+  // v2.1 has a ceramic antenna but stacked DIYLess still detunes it;
+  // 11 dBm A/B cut ping 50→12 ms, 19.5 dBm hung this board.
+  WiFi.setTxPower(WIFI_POWER_8_5dBm);
+#endif
+  if (!full) return;
+  esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G |
+                                         WIFI_PROTOCOL_11N);
+  esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);
+  wifi_config_t cfg{};
+  if (esp_wifi_get_config(WIFI_IF_STA, &cfg) == ESP_OK) {
+    cfg.sta.pmf_cfg.capable = true;
+    cfg.sta.pmf_cfg.required = false;
+    esp_wifi_set_config(WIFI_IF_STA, &cfg);
+  }
+}
+#endif
+
 bool NetServices::wifiConnected() const {
   return WiFi.status() == WL_CONNECTED;
 }
@@ -50,24 +78,7 @@ String NetServices::localIp() const {
 bool NetServices::beginWifi(HcsSettings& settings) {
   settings_ = settings;
   WiFi.mode(WIFI_STA);
-
-  // ★ Bulletproof Wi-Fi: driver properties set BEFORE any association so
-  // the radio can't drop into modem-sleep during the first few seconds of
-  // association (a known silent-drop trigger on bare-metal ESP32-C3).
-  WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
-#if defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(HCS_STRICT_TX)
-  // Back to full TX power: the board now has a separate 1 A LDO powering
-  // the DIYLess shield, so the ESP32's own rail is clean and there's no
-  // brownout risk from TX bursts. 17 dBm cap was historically to protect
-  // weak rails — with the separate-LDO hardware that concern is resolved.
-  // A stronger TX also improves the router hearing the board, which
-  // matters during high-traffic periods (OTA, MQTT burst, discovery).
-  if (WiFi.getTxPower() < WIFI_POWER_19_5dBm) {
-    WiFi.setTxPower(WIFI_POWER_19_5dBm);
-    HCS_LOG("wifi", "TX power raised to 19.5 dBm");
-  }
-#endif
 
   // WiFi event logging — the 5.5-day silent WiFi drop on .195 was
   // undiagnosable because disconnects/reconnects never reached the Log.
@@ -83,8 +94,10 @@ bool NetServices::beginWifi(HcsSettings& settings) {
         HCS_LOG("wifi", "associated");
         break;
       case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-        HCS_LOG("wifi", "up ip=%s rssi=%d", WiFi.localIP().toString().c_str(),
-                WiFi.RSSI());
+        hcsApplyStaRadio(false);
+        HCS_LOG("wifi", "up ip=%s rssi=%d tx=%.1f",
+                WiFi.localIP().toString().c_str(), WiFi.RSSI(),
+                (float)WiFi.getTxPower() / 4.0f);
         break;
       default:
         break;  // scan/start/stop noise stays out of the log
@@ -151,10 +164,8 @@ bool NetServices::beginWifi(HcsSettings& settings) {
   // Saved STA creds live in WiFiManager's own NVS; optional seed below.
   if (settings.configured && settings.wifi_ssid.length()) {
     WiFi.begin(settings.wifi_ssid.c_str(), settings.wifi_pass.c_str());
-#ifdef HCS_BOARD_LOLIN_C3_MINI
-    // C3 stacked on the DIYLess shield shares a small LDO with the PIC;
-    // cap TX power so radio bursts cannot brown the rail out.
-    WiFi.setTxPower(WIFI_POWER_17dBm);
+#if defined(ESP32)
+    hcsApplyStaRadio(false);
 #endif
   }
   // Per-device AP name so simultaneous portals never collide
@@ -171,6 +182,12 @@ bool NetServices::beginWifi(HcsSettings& settings) {
     Serial.println(F("[wifi] giving up"));
     return false;
   }
+
+#if defined(ESP32)
+  hcsApplyStaRadio(true);
+  HCS_LOG("wifi", "radio: ps=none ht20 tx=%.1f dBm rssi=%d",
+          (float)WiFi.getTxPower() / 4.0f, WiFi.RSSI());
+#endif
 
   // Persist whatever we have after successful association
   settings.wifi_ssid = WiFi.SSID();
@@ -866,15 +883,12 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     if (!d["ch_enable"].isNull()) ot_.setChEnable(d["ch_enable"].as<bool>());
 #if defined(ESP32)
     if (!d["txpower"].isNull()) {
-      // Test knob: accepted steps are the Arduino WiFi power constants.
-      // NOTE: setTxPower on a live association can wedge the C3 radio
-      // driver (seen on v1.5.6-test) — always re-associate right after.
       const float want = d["txpower"].as<float>();
-      float best = 19.5f;
+      float best = 8.5f;
       const float steps[] = {19.5, 19, 18.5, 17, 15, 13, 11, 8.5, 7, 5};
       for (float s : steps)
         if (abs(want - s) < abs(want - best)) best = s;
-      wifi_power_t e = WIFI_POWER_19_5dBm;
+      wifi_power_t e = WIFI_POWER_8_5dBm;
       if (best == 19.5f) e = WIFI_POWER_19_5dBm;
       else if (best == 19) e = WIFI_POWER_19dBm;
       else if (best == 18.5f) e = WIFI_POWER_18_5dBm;
@@ -886,10 +900,7 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
       else if (best == 7) e = WIFI_POWER_7dBm;
       else e = WIFI_POWER_5dBm;
       WiFi.setTxPower(e);
-      HCS_LOG("wifi", "TX power set to %.1f dBm — re-associating", best);
-      WiFi.disconnect(false);
-      delay(50);
-      WiFi.begin();
+      HCS_LOG("wifi", "TX power set to %.1f dBm", best);
     }
 #endif
     if (!d["led"].isNull() && led_fn_) {
@@ -1273,7 +1284,7 @@ void NetServices::beginArduinoOta(const HcsSettings& settings,
 // escalates: passive reconnect → full dissociate+begin, and always logs.
 constexpr unsigned long WIFI_RECON_SOFT_MS = 10000;    // 10 s between attempts
 constexpr unsigned long WIFI_RECON_FORCED_MS = 60000;  // force full re-associate after 60 s offline
-constexpr unsigned int  WIFI_FORCE_AFTER_N = 6;        // N soft attempts → force
+constexpr unsigned int  WIFI_FORCE_AFTER_N = 60;  // reconnect() once/min, never disconnect
 
 void NetServices::bulletproofWifiTick() {
   const bool connected = WiFi.status() == WL_CONNECTED;
@@ -1310,20 +1321,11 @@ void NetServices::bulletproofWifiTick() {
   last_tick = millis();
 
   wifi_fail_count_++;
-  if (wifi_fail_count_ % WIFI_FORCE_AFTER_N == 0) {
-    wifi_force_count_++;
-    HCS_LOG("wifi", "offline %u s — forcing full re-association (attempt %u)",
-            wifi_fail_count_, wifi_force_count_);
-    // Superset of reconnect(): drops association + re-associates with
-    // fresh credentials from NVS.
-    WiFi.disconnect();
-    delay(100);
-    WiFi.begin();  // retries with stored credentials
-    return;
-  }
-  if (wifi_fail_count_ == 1) {
-    // First soft attempt via reconnect() — cheap, doesn't break portal.
-    HCS_LOG("wifi", "offline — soft reconnect");
+  // C3 AUTH_EXPIRE / stack wedge: never WiFi.disconnect()+begin() from
+  // the loop. AutoReconnect + reconnect() is the documented path.
+  if (wifi_fail_count_ == 1 || wifi_fail_count_ % WIFI_FORCE_AFTER_N == 0) {
+    if (wifi_fail_count_ % WIFI_FORCE_AFTER_N == 0) wifi_force_count_++;
+    HCS_LOG("wifi", "offline %u s — reconnect()", wifi_fail_count_);
     WiFi.reconnect();
   }
 }

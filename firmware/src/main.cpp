@@ -561,12 +561,6 @@ void loop() {
   syncWcFromDevice();
 
   if (WiFi.status() != WL_CONNECTED) {
-    // brief reconnect attempt; portal not re-opened automatically
-    static unsigned long last = 0;
-    if (millis() - last > 15000) {
-      last = millis();
-      WiFi.reconnect();
-    }
     failsafeLoop(false);
   } else if (settings.mqtt_host.length()) {
     // keep IP fresh for discovery
