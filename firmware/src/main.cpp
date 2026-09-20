@@ -22,6 +22,7 @@
 #include "net_services.h"
 #if defined(ESP32)
 #include <esp_system.h>
+#include <esp_task_wdt.h>
 #include <Preferences.h>
 #endif
 #include "hcs_status_led.h"
@@ -496,10 +497,32 @@ void setup() {
 
   Serial.println(F("[boot] ready — open http://device-ip/ for status & OTA"));
 #endif
+
+#if defined(ESP32) && !defined(HCS_TEST_BOOT) && defined(HCS_LOOP_WDT)
+  // ── Loop watchdog ──────────────────────────────────────────────────────
+  // A wedged Wi-Fi/driver call once left this loop (and ot.loop() with it)
+  // silent for hours — the boiler faults F.95 after ~60 s of OpenTherm
+  // silence. Subscribing the loop task to the task WDT: any hang > 20 s
+  // now triggers an automatic reset, so the OT master recovers in seconds
+  // instead of minutes (see 1.5.6-test build notes).
+  {
+    // Default IDF config watches idle tasks at 5 s — re-arm at 20 s, panic on.
+    esp_task_wdt_init(20, true);
+    esp_err_t e = esp_task_wdt_add(nullptr);  // current task = loopTask
+    const char* es = "armed";
+    if (e == ESP_ERR_NO_MEM) es = "no memory";
+    else if (e == ESP_ERR_INVALID_ARG) es = "invalid arg";
+    else if (e != ESP_OK) es = "failed";
+    HCS_LOG("boot", "loop WDT %s (20 s feed window)", es);
+  }
+#endif
 }
 
 void loop() {
   HCS_MARK("loop");
+#if defined(ESP32) && !defined(HCS_TEST_BOOT) && defined(HCS_LOOP_WDT)
+  esp_task_wdt_reset();  // loop must reach here every ≤ 20 s or the WDT resets
+#endif
   // After 90 s of continuous run, treat unclean crash counter as healed so
   // the next power cycle does not stay stuck in OT safe-mode forever.
   {

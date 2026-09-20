@@ -6,6 +6,10 @@
 #include "hcs_sys_log.h"
 #include "hcs_panic.h"
 #include "hcs_wifi_heal.h"
+#if defined(ESP32)
+#include <esp_task_wdt.h>
+#include <Preferences.h>
+#endif
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
 #include "ot_gateway.h"
 #endif
@@ -605,6 +609,17 @@ setInterval(()=>{if($('log_auto')&&$('log_auto').checked&&document.getElementByI
 void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   node_id_ = nodeId;
   settings_ = settings;
+
+#if defined(ESP32)
+  // Restore the persisted reason for the previous (outgoing) reboot —
+  // RAM copy is lost on every restart; the NVS note is the only record.
+  Preferences pp;
+  if (pp.begin("hcsrst", true)) {
+    last_reboot_reason_ = pp.getString("last", "");
+    last_reboot_reason_ += " (prev boot)";
+    pp.end();
+  }
+#endif
 
   // OTA rollback state lives on LittleFS; mount once.
 #if defined(ESP32)
@@ -1419,6 +1434,11 @@ bool NetServices::startHttpUpdate(const String& url) {
             last_reboot_reason_.c_str());
     return false;
   }
+#if defined(ESP32) && defined(HCS_LOOP_WDT)
+  // OTA download can block the loop for minutes on a slow mirror — take
+  // the loop task off the watchdog for the duration so it can't fire.
+  esp_task_wdt_delete(nullptr);
+#endif
   ota_busy_ = true;
   ota_last_progress_ = -1;
 
@@ -1498,6 +1518,9 @@ bool NetServices::startHttpUpdate(const String& url) {
       scheduleReboot(1200, "ota complete");  // let the "done" report drain first
       break;
   }
+#if defined(ESP32) && defined(HCS_LOOP_WDT)
+  esp_task_wdt_add(nullptr);  // re-arm the loop watchdog after OTA
+#endif
   ota_busy_ = false;
   return ret == HTTP_UPDATE_OK;
 }
@@ -1508,6 +1531,15 @@ void NetServices::scheduleReboot(unsigned long delayMs, const char* reason) {
   last_reboot_reason_ = reason ? reason : "unspecified";
   HCS_LOG("reboot", "scheduled in %lums — %s",
           (unsigned long)delayMs, last_reboot_reason_.c_str());
+#if defined(ESP32)
+  // Persist why: lost on restart otherwise, and boot forensics (the 1.5.5
+  // F.95 outage) depend on knowing whether the heal path or a panic won.
+  Preferences pp;
+  if (pp.begin("hcsrst", false)) {
+    pp.putString("last", last_reboot_reason_);
+    pp.end();
+  }
+#endif
 }
 
 
