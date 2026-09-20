@@ -709,9 +709,9 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     doc["board"] = HCS_BOARD_NAME;
     doc["version"] = HCS_FW_VERSION;
     doc["ip"] = WiFi.localIP().toString();
-    doc["name"] = settings_.device_name;
-    doc["mqtt_host"] = settings_.mqtt_host;
-    doc["mqtt_port"] = settings_.mqtt_port;
+    doc["name"] = liveCfg().device_name;
+    doc["mqtt_host"] = liveCfg().mqtt_host;
+    doc["mqtt_port"] = liveCfg().mqtt_port;
     doc["rssi"] = WiFi.RSSI();
     doc["uptime"] = millis() / 1000UL;
     doc["reset_reason"] = reset_reason_;
@@ -743,7 +743,7 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
       const hcs::GwCounters& c = gw_->counters();
       JsonObject g = doc["gw"].to<JsonObject>();
       g["mode"] = "gateway";
-      g["cfg"] = hcs_gw_cfg_name(settings_.gw_cfg);
+      g["cfg"] = hcs_gw_cfg_name(liveCfg().gw_cfg);
       g["tstat_online"] = gw_->thermostatOnline();
       float ov = gw_->overrideSetpointC();
       if (!isnan(ov)) g["override_setpoint"] = ov;
@@ -755,7 +755,7 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     } else {
       JsonObject g = doc["gw"].to<JsonObject>();
       g["mode"] = "master_only";
-      g["cfg"] = hcs_gw_cfg_name(settings_.gw_cfg);
+      g["cfg"] = hcs_gw_cfg_name(liveCfg().gw_cfg);
     }
 #endif
     // Boiler diagnostics
@@ -874,8 +874,8 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
         return false;
       }
     }
-    if (settings_.ota_password.length() == 0) return true;
-    if (server.authenticate("admin", settings_.ota_password.c_str())) return true;
+    if (liveCfg().ota_password.length() == 0) return true;
+    if (server.authenticate("admin", liveCfg().ota_password.c_str())) return true;
     server.requestAuthentication();
     return false;
   };
@@ -997,8 +997,8 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   });
 
   server.on("/api/ota", HTTP_POST, [this]() {
-    if (settings_.ota_password.length()) {
-      if (!server.authenticate("admin", settings_.ota_password.c_str())) {
+    if (liveCfg().ota_password.length()) {
+      if (!server.authenticate("admin", liveCfg().ota_password.c_str())) {
         return server.requestAuthentication();
       }
     }
