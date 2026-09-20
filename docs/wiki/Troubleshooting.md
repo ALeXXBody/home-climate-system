@@ -10,7 +10,7 @@
 
 ## Board boots but can't connect to WiFi
 
-1. The captive portal should auto-start: connect to `HCS-Setup-XXXX` (password: `homeclimate`)
+1. The captive portal should auto-start: connect to `HCS-Setup-XXXX` (open network)
 2. If portal doesn't pop up, browse to `http://192.168.4.1`
 3. If the portal times out (5 min), the board reboots and retries
 4. Check WiFi SSID and password are correct

@@ -9,7 +9,7 @@
 
 ## 1. First boot (captive portal)
 
-Firmware **v0.2+** opens AP **`HCS-Setup`** / password **`homeclimate`** when WiFi
+Firmware **v0.2+** opens AP **`HCS-Setup`** (open network) when WiFi
 is not configured. Join it, open the portal, set home WiFi + MQTT, save.
 
 Optional compile-time seeds (gitignored):
@@ -118,7 +118,7 @@ Mode is persisted and re-applied at boot; switching always reboots.
 
 | Symptom | Check |
 |---|---|
-| No WiFi | join `HCS-Setup` / `homeclimate`, 2.4 GHz SSID only |
+| No WiFi | join `HCS-Setup`  (open), 2.4 GHz SSID only |
 | No MQTT | portal MQTT host, broker IP, firewall, user/pass |
 | OT `valid=false` | wiring IN/OUT swapped?, boiler powered, OT cable |
 | Browser `/update` page gone | removed in 1.3.6+ — use ArduinoOTA or POST /api/ota (see §5) |

@@ -143,14 +143,20 @@ bool NetServices::beginWifi(HcsSettings& settings) {
   WiFiManagerParameter p_mqtt_port("mqtt_port", "MQTT port", portbuf, 6);
   WiFiManagerParameter p_mqtt_user("mqtt_user", "MQTT user",
                                    settings.mqtt_user.c_str(), 32);
-  WiFiManagerParameter p_mqtt_pass("mqtt_pass", "MQTT password",
-                                   settings.mqtt_pass.c_str(), 32);
+  // Password fields render as <input ... type='password'> — WiFiManager's
+  // {c} token lands inside the input tag (see HTTP_FORM_PARAM template).
+  // Without it the settings snapshot / portal form showed all secrets in
+  // the clear — a security issue reported in production.
+  // Default value intentionally empty — stored secrets are never echoed
+  // back into the portal HTML; blank on save = keep existing.
+  WiFiManagerParameter p_mqtt_pass("mqtt_pass", "MQTT password", "", 32,
+                                   "type='password' autocomplete='off'");
   WiFiManagerParameter p_prefix("mqtt_prefix", "MQTT prefix",
                                 settings.mqtt_prefix.c_str(), 16);
   WiFiManagerParameter p_name("dev_name", "Device name",
                               settings.device_name.c_str(), 32);
-  WiFiManagerParameter p_ota("ota_pass", "OTA password (optional)",
-                             settings.ota_password.c_str(), 32);
+  WiFiManagerParameter p_ota("ota_pass", "OTA password (optional)", "", 32,
+                             "type='password' autocomplete='off'");
 
   wm.addParameter(&p_mqtt_host);
   wm.addParameter(&p_mqtt_port);
@@ -198,12 +204,15 @@ bool NetServices::beginWifi(HcsSettings& settings) {
     settings.mqtt_port = (uint16_t)atoi(p_mqtt_port.getValue());
     if (!settings.mqtt_port) settings.mqtt_port = 1883;
     settings.mqtt_user = hcs_trim(p_mqtt_user.getValue());
-    settings.mqtt_pass = p_mqtt_pass.getValue();
+    // Secrets are never echoed into the portal HTML (masked inputs alone
+    // would still leak via the page source). Blank field = keep stored.
+    if (strlen(p_mqtt_pass.getValue()))
+      settings.mqtt_pass = p_mqtt_pass.getValue();
     String pref = hcs_trim(p_prefix.getValue());
     if (pref.length()) settings.mqtt_prefix = pref;
     String nm = hcs_trim(p_name.getValue());
     if (nm.length()) settings.device_name = nm;
-    settings.ota_password = p_ota.getValue();
+    if (strlen(p_ota.getValue())) settings.ota_password = p_ota.getValue();
   }
   // Compile-time fallback if portal left MQTT empty — but never accept a
   // secrets-template placeholder as "configured".

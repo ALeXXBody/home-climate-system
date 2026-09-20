@@ -2,7 +2,7 @@
 // Compile-time defaults. Runtime WiFi/MQTT come from captive portal (NVS).
 
 #ifndef HCS_FW_VERSION
-#define HCS_FW_VERSION "1.5.8"
+#define HCS_FW_VERSION "1.5.9"
 #endif
 
 #ifndef HCS_BOARD_NAME
@@ -66,9 +66,13 @@
 #define DEFAULT_CH_ENABLE 0
 #define DEFAULT_DHW_ENABLE 1
 
-// Captive portal AP
+// Captive portal AP — OPEN (no password). The setup SSID only ever exists
+// while the board is in portal mode, and a fixed password shared via docs
+// (and visible in the flasher page) protects nothing; WPA2 AP módea
+// would just fake security. Secrets (WiFi/MQTT/OTA) are entered *inside*
+// the portal over the local HTTP form.
 #define PORTAL_AP_NAME "HCS-Setup"
-#define PORTAL_AP_PASS "homeclimate"  // min 8 chars; change after first boot if desired
+#define PORTAL_AP_PASS ""  // empty = open AP (WiFiManager treats "" as open)
 #define WIFI_CONNECT_TIMEOUT_S 45
 #define CONFIG_PORTAL_TIMEOUT_S 300
 

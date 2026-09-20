@@ -64,7 +64,7 @@ On your phone or laptop, connect to WiFi:
 
 | SSID | Password |
 |---|---|
-| `HCS-Setup-XXXX` | `homeclimate` |
+| `HCS-Setup-XXXX` | *(open, no password)* |
 
 (`XXXX` = last 4 hex chars of the MAC address)
 

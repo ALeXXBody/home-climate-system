@@ -1,22 +1,28 @@
 #pragma once
 /**
- * Diagnostic status LED — single addressable WS2812.
+ * Diagnostic status LED — two hardware families:
+ *   • WS2812 (default via -DHCS_STATUS_LED_WS2812)  → neopixelWrite, colour
+ *     patterns + brightness (C3 mini v2.1, WS2812 on GPIO7).
+ *   • plain digital LED (-DHCS_STATUS_LED_PLAIN)    → digitalWrite blink,
+ *     single-colour patterns on timing only (D1 mini ESP32 GPIO2,
+ *     S2 mini LED1 GPIO15). Polarity via -DHCS_STATUS_LED_ACTIVE_LOW.
  *
- * Patterns:
- *   FAIL     red strobe (failsafe active)
- *   WIFI     fast blue blink (re-associating)
- *   NOLINK   amber medium blink (OT no-link)
- *   OK       slow green heartbeat
+ * Patterns (period/on-ms):
+ *   OK       3000/60    slow heartbeat
+ *   NOLINK    900/280   no OpenTherm link
+ *   WIFI      260/130   re-associating
+ *   FAIL      320/160   failsafe strobe
  *
- * Brightness (1-255, default 64 = 25%) + enable/disable via MQTT (hcs/<node>/set/led)
- * and POST /api/control {"key":"led","value":"on" | "off" | "<brightness>"}
- * persisted in HcsSettings.led_enable / led_brightness via Preferences.
- *
- * neopixelWrite is safe to call from loop() context once setup() has completed.
+ * Brightness (1-255, default 64) applies to WS2812 only; plain LEDs blink
+ * at full strength. on/off + brightness via MQTT (hcs/<node>/set/led) and
+ * POST /api/control {"led": ...}; persisted in HcsSettings.
  *
  * Build flags:
- *   -DHCS_STATUS_LED_PIN=n    (omit → compiled out)
- *   -DHCS_STATUS_LED_DISABLE  (set in platformio.ini for boards without an LED)
+ *   -DHCS_STATUS_LED_PIN=n            (omit → compiled out)
+ *   -DHCS_STATUS_LED_WS2812           addressable RGB (C3 mini v2.1)
+ *   -DHCS_STATUS_LED_PLAIN            single-colour digital LED
+ *   -DHCS_STATUS_LED_ACTIVE_LOW       LED lights when pin is LOW
+ *   -DHCS_STATUS_LED_DISABLE          compiled out regardless
  */
 #include <Arduino.h>
 
@@ -26,7 +32,7 @@ class StatusLed {
 #if defined(HCS_STATUS_LED_PIN) && !defined(HCS_STATUS_LED_DISABLE) && defined(ESP32)
     _pin = HCS_STATUS_LED_PIN;
     pinMode(_pin, OUTPUT);
-    neopixelWrite(_pin, 0, 0, 0);  // dark at boot until update() sets pattern
+    paint_off();
 #else
     _pin = 255;
 #endif
@@ -86,16 +92,33 @@ class StatusLed {
     _on = on;
     if (!on) { paint_off(); return; }
 #if defined(HCS_STATUS_LED_PIN) && !defined(HCS_STATUS_LED_DISABLE) && defined(ESP32)
+#if defined(HCS_STATUS_LED_WS2812)
     uint8_t r, g, b;
     colorOf_(_mode, r, g, b);
     uint8_t dim = (uint32_t)_brightness * _brightness / 255;
     neopixelWrite(_pin, (r * dim) >> 8, (g * dim) >> 8, (b * dim) >> 8);
+#elif defined(HCS_STATUS_LED_PLAIN)
+    digitalWrite(_pin, active_high_() ? HIGH : LOW);
+#endif
 #endif
   }
 
   void paint_off() {
 #if defined(HCS_STATUS_LED_PIN) && !defined(HCS_STATUS_LED_DISABLE) && defined(ESP32)
+#if defined(HCS_STATUS_LED_WS2812)
     neopixelWrite(_pin, 0, 0, 0);
+#elif defined(HCS_STATUS_LED_PLAIN)
+    digitalWrite(_pin, active_high_() ? LOW : HIGH);
+#endif
+#endif
+  }
+
+ private:
+  static constexpr bool active_high_() {
+#if defined(HCS_STATUS_LED_ACTIVE_LOW)
+    return false;
+#else
+    return true;
 #endif
   }
 

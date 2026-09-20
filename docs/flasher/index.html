@@ -21,8 +21,8 @@
 <div class="card" style="border-color:#c33; background:#fff5f5">
   <h2>RECOVERY — board is dead / bootlooping / not on the network</h2>
   <p>Minimal image with <strong>no OpenTherm, no 1-Wire, no status LED, no setup portal</strong>.
-  It clears the crash counter, joins your WiFi (or opens AP <code>HCS-Recovery-XXXX</code>,
-  password <code>homeclimate</code>) and shows a web page at <code>http://&lt;ip&gt;/</code>
+  It clears the crash counter, joins your WiFi (or opens the open AP <code>HCS-Recovery-XXXX</code>)
+  and shows a web page at <code>http://&lt;ip&gt;/</code>
   for uploading full firmware over LAN. Never reboots itself.</p>
   <esp-web-install-button manifest="manifest-recovery.json"></esp-web-install-button>
 </div>
@@ -53,8 +53,8 @@ port (<code>ttyUSB…</code>/<code>cu.usbserial…</code>/<code>COM…</code>) �
 <li>If the port is missing or install fails at "Connecting": hold the <code>BOOT</code>
 button while plugging in, then retry (C3/S2/S3 native USB).</li>
 <li>Close any serial monitor using the port first.</li>
-<li>After flashing the LED blinks and the device starts access point
-<code>HCS-Setup</code> (password <code>homeclimate</code>) — join it to configure WiFi/MQTT,
+<li>After flashing the LED blinks and the device starts the open access point
+<code>HCS-Setup</code> — join it to configure WiFi/MQTT,
 see <a href="../flash.html">flash guide</a>.</li>
 <li>This erases settings when you tick "erase device" — plan to re-run setup.</li>
 </ul>

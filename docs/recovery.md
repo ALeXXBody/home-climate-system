@@ -20,7 +20,7 @@ bootloops. It never reboots itself.
 
 1. Clears the stuck `unclean_boots` NVS counter
 2. Connects to your saved WiFi (SSID/password from NVS are preserved)
-   — if that fails it opens an AP `HCS-Recovery-XXXX` (password `homeclimate`)
+   — if that fails it opens an AP `HCS-Recovery-XXXX`
 3. Serves `http://<device-ip>/` with a **web upload form** to flash the
    full firmware back over LAN
 4. Prints an alive/heap line every 5 s on serial (115200)
