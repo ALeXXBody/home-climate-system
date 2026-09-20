@@ -712,6 +712,13 @@ void test_fs_ch_demand(void) {
   TEST_ASSERT_TRUE(hcs::fs_ch_demand(hcs::FsState::CONNECTED, true));
 }
 
+void test_fs_undo_forced_heat_only_after_failsafe(void) {
+  using hcs::FsState;
+  TEST_ASSERT_FALSE(hcs::fs_undo_forced_heat(FsState::HOLD));
+  TEST_ASSERT_FALSE(hcs::fs_undo_forced_heat(FsState::CONNECTED));
+  TEST_ASSERT_TRUE(hcs::fs_undo_forced_heat(FsState::FAILSAFE));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_ch_enable_on_variants);
@@ -770,6 +777,7 @@ int main(void) {
   RUN_TEST(test_ot_fhb_format);
   RUN_TEST(test_fs_states);
   RUN_TEST(test_fs_ch_demand);
+  RUN_TEST(test_fs_undo_forced_heat_only_after_failsafe);
   RUN_TEST(test_gw_override_parse);
   RUN_TEST(test_gw_topics_do_not_shadow_flow_setpoint);
   RUN_TEST(test_wifi_recon_first_fail_soft);

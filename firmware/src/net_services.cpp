@@ -1225,10 +1225,11 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     uint8_t cfg = strcmp(m, "gateway") == 0   ? HCS_GW_GATEWAY
                   : strcmp(m, "master_only") == 0 ? HCS_GW_MASTER_ONLY
                                                   : HCS_GW_AUTO;
-    settings_.gw_cfg = cfg;
+    liveCfg().gw_cfg = cfg;
     SettingsStore store;
     store.begin();
-    store.save(settings_);
+    store.save(liveCfg());
+    if (shared_) settings_ = *shared_;
     server.send(200, "application/json",
                 "{\"ok\":true,\"message\":\"saved, rebooting\"}");
     scheduleReboot(800, "gw mode change");
@@ -1387,14 +1388,15 @@ String NetServices::settingsSnapshotJson() const {
   };
   auto isSet = [](const String& v) { return v.length() > 0; };
   String j = "{";
-  j += "\"device_name\":\"" + esc(settings_.device_name) + "\",";
-  j += "\"mqtt_host\":\"" + esc(settings_.mqtt_host) + "\",";
-  j += "\"mqtt_port\":" + String(settings_.mqtt_port) + ",";
-  j += "\"mqtt_user\":\"" + esc(settings_.mqtt_user) + "\",";
-  j += "\"mqtt_user_set\":" + String(isSet(settings_.mqtt_user) ? "true" : "false") + ",";
-  j += "\"mqtt_prefix\":\"" + esc(settings_.mqtt_prefix) + "\",";
+  const HcsSettings& s = liveCfg();
+  j += "\"device_name\":\"" + esc(s.device_name) + "\",";
+  j += "\"mqtt_host\":\"" + esc(s.mqtt_host) + "\",";
+  j += "\"mqtt_port\":" + String(s.mqtt_port) + ",";
+  j += "\"mqtt_user\":\"" + esc(s.mqtt_user) + "\",";
+  j += "\"mqtt_user_set\":" + String(isSet(s.mqtt_user) ? "true" : "false") + ",";
+  j += "\"mqtt_prefix\":\"" + esc(s.mqtt_prefix) + "\",";
   j += "\"ota_password_set\":" +
-       String(settings_.ota_password.length() ? "true" : "false");
+       String(s.ota_password.length() ? "true" : "false");
   j += "}";
   return j;
 }
@@ -1403,30 +1405,32 @@ bool NetServices::applySettingsJson(const String& json) {
   JsonDocument d;
   if (deserializeJson(d, json)) return false;
 
+  HcsSettings& cfg = liveCfg();
   const char* v;
   if ((v = d["device_name"] | (const char*)nullptr))
-    settings_.device_name = hcs_trim(v).substring(0, 31);
+    cfg.device_name = hcs_trim(v).substring(0, 31);
   if ((v = d["mqtt_host"] | (const char*)nullptr))
-    settings_.mqtt_host = hcs_trim(v).substring(0, 63);
+    cfg.mqtt_host = hcs_trim(v).substring(0, 63);
   int p = d["mqtt_port"] | -1;
-  if (p > 0 && p < 65536) settings_.mqtt_port = (uint16_t)p;
+  if (p > 0 && p < 65536) cfg.mqtt_port = (uint16_t)p;
   if ((v = d["mqtt_user"] | (const char*)nullptr))
-    settings_.mqtt_user = hcs_trim(v).substring(0, 31);
+    cfg.mqtt_user = hcs_trim(v).substring(0, 31);
   if ((v = d["mqtt_pass"] | (const char*)nullptr))
-    settings_.mqtt_pass = String(v).substring(0, 31);
+    cfg.mqtt_pass = String(v).substring(0, 31);
   if ((v = d["mqtt_prefix"] | (const char*)nullptr))
-    settings_.mqtt_prefix = hcs_trim(v).substring(0, 15);
-  if (d["led_enable"].is<bool>()) settings_.led_enable = d["led_enable"].as<bool>();
+    cfg.mqtt_prefix = hcs_trim(v).substring(0, 15);
+  if (d["led_enable"].is<bool>()) cfg.led_enable = d["led_enable"].as<bool>();
   if (d["led_brightness"].is<int>()) {
     int b = d["led_brightness"].as<int>();
-    settings_.led_brightness = (uint8_t)constrain(b, 1, 255);
+    cfg.led_brightness = (uint8_t)constrain(b, 1, 255);
   }
   if ((v = d["ota_password"] | (const char*)nullptr))
-    settings_.ota_password = String(v).substring(0, 31);
+    cfg.ota_password = String(v).substring(0, 31);
 
   SettingsStore store;
   store.begin();
-  store.save(settings_);
+  store.save(cfg);
+  if (shared_) settings_ = *shared_;
 
   // Echo the new state before the reboot pulls the MQTT link down.
   if (cfg_report_) cfg_report_(settingsSnapshotJson());

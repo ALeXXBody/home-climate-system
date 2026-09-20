@@ -115,6 +115,8 @@ class NetServices {
   bool http_started_ = false;
   String node_id_;
   HcsSettings settings_;
+  HcsSettings& liveCfg() { return shared_ ? *shared_ : settings_; }
+  const HcsSettings& liveCfg() const { return shared_ ? *shared_ : settings_; }
   bool reboot_pending_ = false;
   bool ota_busy_ = false;
   unsigned long ota_last_report_ms_ = 0;

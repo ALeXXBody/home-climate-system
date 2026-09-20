@@ -80,10 +80,10 @@ static void failsafeLoop(bool link_up) {
 
   if (link_up) {
     lost_since_ms = 0;
-    if (fs_state != hcs::FsState::CONNECTED) {
+    if (hcs::fs_undo_forced_heat(fs_state)) {
       applyFailsafe(false);
-      fs_state = hcs::FsState::CONNECTED;
     }
+    fs_state = hcs::FsState::CONNECTED;
     return;
   }
 

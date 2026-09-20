@@ -48,4 +48,9 @@ inline bool fs_ch_demand(FsState st, bool last_cmd) {
   return last_cmd;
 }
 
+/** Undo forced heat only after FAILSAFE. HOLD keeps the last CH command. */
+inline bool fs_undo_forced_heat(FsState leaving) {
+  return leaving == FsState::FAILSAFE;
+}
+
 }  // namespace hcs
