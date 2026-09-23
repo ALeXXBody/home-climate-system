@@ -16,6 +16,21 @@ namespace hcs {
 class HcsSensors;
 }
 
+/** Lowercased MAC with colons stripped — the device's stable public id. */
+inline String hcs_mac_token(const String& mac) {
+  String m = mac;
+  m.replace(":", "");
+  m.toLowerCase();
+  return m;
+}
+
+/** Default admin/OTA password derived from the MAC, so the device is not
+ *  wide-open by default yet remains recoverable (the MAC is the node id shown
+ *  in the panel / MQTT discovery). Printed at boot; replace via the portal. */
+inline String hcs_default_admin_password(const String& mac) {
+  return "hcs" + hcs_mac_token(mac);
+}
+
 class NetServices {
  public:
   NetServices(OtMaster& ot);

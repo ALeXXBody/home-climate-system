@@ -896,7 +896,14 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
                   "{\"ok\":false,\"error\":\"cross-origin rejected\"}");
       return false;
     }
-    if (liveCfg().ota_password.length() == 0) return true;
+    if (liveCfg().ota_password.length() == 0) {
+      // No user password set → fall back to the MAC-derived default instead
+      // of leaving the device open (secure by default, recoverable).
+      String pw = hcs_default_admin_password(WiFi.macAddress());
+      if (server.authenticate("admin", pw.c_str())) return true;
+      server.requestAuthentication();
+      return false;
+    }
     if (server.authenticate("admin", liveCfg().ota_password.c_str())) return true;
     server.requestAuthentication();
     return false;

@@ -27,7 +27,9 @@
 
 static WebServer server(80);
 static String node_id;
+static String recovery_pass;
 static bool sta_ok = false;
+static bool upload_ok = false;
 
 static void handleRoot() {
   String html = F(
@@ -48,7 +50,7 @@ static void handleRoot() {
       "<form method=POST action=/update enctype=multipart/form-data>"
       "<input type=file name=firmware accept='.bin,.bin'>"
       "<button type=submit>Flash full firmware</button></form>"
-      "<p style=color:#888>1.4.9-recovery &middot; settings in NVS are "
+      "<p style=color:#888>1.5.0-recovery &middot; settings in NVS are "
       "preserved</p></body></html>");
   server.send(200, "text/html", html);
 }
@@ -64,16 +66,27 @@ static void handleUpdateDone() {
 static void handleUpdateUpload() {
   HTTPUpload& up = server.upload();
   if (up.status == UPLOAD_FILE_START) {
+    // Require the MAC-derived admin password before flashing (matches the
+    // full firmware default so the owner can recover it the same way).
+    upload_ok = server.authenticate("admin", recovery_pass.c_str());
+    if (!upload_ok) {
+      server.requestAuthentication();
+      return;  // discard this upload (Update.begin never runs)
+    }
     Serial.printf("[rec] OTA start: %s\n", up.filename.c_str());
-    if (!Update.begin(UPDATE_SIZE_UNKNOWN)) Update.printError(Serial);
+    if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+      Update.printError(Serial);
+      upload_ok = false;
+    }
   } else if (up.status == UPLOAD_FILE_WRITE) {
-    if (Update.write(up.buf, up.currentSize) != up.currentSize)
+    if (upload_ok && Update.write(up.buf, up.currentSize) != up.currentSize)
       Update.printError(Serial);
   } else if (up.status == UPLOAD_FILE_END) {
-    if (Update.end(true))
+    if (upload_ok && Update.end(true))
       Serial.printf("[rec] OTA success: %u bytes\n", up.totalSize);
-    else
+    else if (upload_ok)
       Update.printError(Serial);
+    upload_ok = false;
   }
 }
 
@@ -108,7 +121,7 @@ void setup() {
   Serial.begin(115200);
   delay(1500);  // let USB-CDC enumerate before we print
   Serial.println();
-  Serial.println(F("=== HCS RECOVERY 1.4.9 ==="));
+  Serial.println(F("=== HCS RECOVERY 1.5.0 ==="));
   Serial.println(F("OT/1-Wire/WS2812 all disabled — this image cannot "
                    "hit the previous crash paths"));
 
@@ -134,6 +147,11 @@ void setup() {
            mac[2], mac[3], mac[4], mac[5]);
   node_id = id;
   Serial.printf("[rec] node: %s\n", id);
+  // Same default admin password scheme as the full firmware (recoverable).
+  char pw[24];
+  snprintf(pw, sizeof(pw), "hcs%02x%02x%02x%02x%02x%02x", mac[0], mac[1],
+           mac[2], mac[3], mac[4], mac[5]);
+  recovery_pass = pw;
 
   // 3) Network: saved STA, else fallback AP (never blocks >10 s)
   sta_ok = trySavedWifi();
@@ -141,15 +159,15 @@ void setup() {
     WiFi.mode(WIFI_AP);
     String ap = String("HCS-Recovery-") + String(mac[4], HEX) +
                 String(mac[5], HEX);
-    WiFi.softAP(ap.c_str(), "homeclimate");
-    Serial.printf("[rec] AP '%s' pass 'homeclimate' ip %s\n", ap.c_str(),
-                  WiFi.softAPIP().toString().c_str());
+    WiFi.softAP(ap.c_str(), recovery_pass.c_str());
+    Serial.printf("[rec] AP '%s' pass '%s' ip %s\n", ap.c_str(),
+                  recovery_pass.c_str(), WiFi.softAPIP().toString().c_str());
   }
 
   // 4) Tiny web server for LAN re-flash
   server.on("/", HTTP_GET, handleRoot);
   server.on("/api/status", HTTP_GET, []() {
-    String j = "{\"version\":\"1.4.9-recovery\",\"recovery\":true,"
+    String j = "{\"version\":\"1.5.0-recovery\",\"recovery\":true,"
                "\"node_id\":\"";
     j += node_id;
     j += "\",\"ip\":\"";

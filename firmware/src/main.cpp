@@ -277,6 +277,8 @@ void setup() {
   Serial.println(F("=== Home Climate System ==="));
   Serial.printf("FW %s  board %s  OT_IN=%d OT_OUT=%d\n", HCS_FW_VERSION,
                 HCS_BOARD_NAME, OT_IN_PIN, OT_OUT_PIN);
+  Serial.printf("Default admin password: %s (set a custom one in the portal)\n",
+                hcs_default_admin_password(WiFi.macAddress()).c_str());
 
   // ---- Power health: classify this boot and count unclean ones. -------
   // A supply that browns out under radio load shows up here as a growing
