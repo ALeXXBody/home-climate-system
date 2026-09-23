@@ -34,7 +34,8 @@ struct EepromBlob {
   char mqtt_user[32];
   char mqtt_pass[32];
   char mqtt_prefix[16];
-  char reserved_legacy[32];  // keeps ESP8266 blob layout stable
+  uint8_t auth_enable;           // web control-plane auth toggle (1=on)
+  char reserved_legacy[31];      // keeps ESP8266 blob layout stable
   char device_name[32];
   char ota_password[32];
   uint8_t configured;
@@ -79,6 +80,7 @@ bool SettingsStore::load(HcsSettings& out) {
   out.mqtt_prefix = prefs.getString("mqtt_prefix", "hcs");
   out.device_name = prefs.getString("dev_name", "Home Climate System");
   out.ota_password = prefs.getString("ota_pass", "");
+  out.auth_enabled = prefs.getBool("auth_en", true);
   out.led_enable = prefs.getBool("led_en", true);
   out.led_brightness = prefs.getUChar("led_br", 64);
   out.wc_enable = prefs.getBool("wc_en", false);
@@ -162,6 +164,8 @@ bool SettingsStore::load(HcsSettings& out) {
   out.device_name = String(b.device_name);
   out.mqtt_host.trim();
   out.ota_password = String(b.ota_password);
+  // Migrated/erased blobs read 0xFF here → treated as enabled (the default).
+  out.auth_enabled = b.auth_enable != 0;
   out.wc_enable = b.wc_enable != 0;
   out.wc_t_out_ref = b.wc_t_out_ref;
   out.wc_t_out_design = b.wc_t_out_design;
@@ -210,6 +214,7 @@ bool SettingsStore::save(const HcsSettings& in) {
   prefs.putString("mqtt_prefix", in.mqtt_prefix);
   prefs.putString("dev_name", in.device_name);
   prefs.putString("ota_pass", in.ota_password);
+  prefs.putBool("auth_en", in.auth_enabled);
   prefs.putBool("led_en", in.led_enable);
   prefs.putUChar("led_br", in.led_brightness);
   prefs.putBool("wc_en", in.wc_enable);
@@ -249,6 +254,7 @@ bool SettingsStore::save(const HcsSettings& in) {
   strncpy(b.mqtt_prefix, in.mqtt_prefix.c_str(), sizeof(b.mqtt_prefix) - 1);
   strncpy(b.device_name, in.device_name.c_str(), sizeof(b.device_name) - 1);
   strncpy(b.ota_password, in.ota_password.c_str(), sizeof(b.ota_password) - 1);
+  b.auth_enable = in.auth_enabled ? 1 : 0;
   b.wc_enable = in.wc_enable ? 1 : 0;
   b.wc_t_out_ref = in.wc_t_out_ref;
   b.wc_t_out_design = in.wc_t_out_design;

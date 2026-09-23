@@ -27,6 +27,7 @@ struct HcsSettings {
   String mqtt_prefix = "hcs";
   String device_name = "Home Climate System";
   String ota_password = "";
+  bool auth_enabled = true;   // web/OTA control-plane authentication toggle
   bool configured = false;
 
   // Status LED (WS2812 on ESP32 boards; ignored elsewhere)

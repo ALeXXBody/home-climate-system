@@ -409,7 +409,12 @@ publishes a named sensor to Home Assistant. Health is re-checked every poll
 <label>MQTT user</label><input id=s_user maxlength=31 autocomplete=off>
 <label>MQTT password</label><input id=s_pass maxlength=31 type=password autocomplete=new-password placeholder=(unchanged)>
 <label>Topic prefix</label><input id=s_prefix maxlength=15 value=hcs>
-<label>OTA password (blank = none)</label><input id=s_otapass maxlength=31 type=password autocomplete=new-password placeholder=(unchanged)>
+<div id=auth_banner style="display:none;background:#3a2a1a;border:1px solid #8a6a3a;color:#f0d9a0;padding:8px;border-radius:6px;margin:8px 0">
+<b>No admin password set.</b> Create one below to protect this device.
+</div>
+<label><input type=checkbox id=s_auth style="width:auto;margin-right:6px">Enable authentication</label>
+<label>Admin password</label><input id=s_otapass maxlength=31 type=password autocomplete=new-password placeholder=(set password)>
+<button class=g onclick="setPass()">Set password</button>
 <button class=a onclick="saveSettings()">Save &amp; reboot</button>
 <div id=msg></div>
 </div>
@@ -611,8 +616,20 @@ async function loadSettings(){
  s_led.textContent=c.led_enable?'on':'off';
  s_led_b.value=c.led_brightness||64;
  s_led_b_label.textContent=s_led_b.value;
+ s_auth.checked=c.auth_enabled!==false;
+ auth_banner.style.display=(c.auth_enabled!==false&&!c.ota_password_set)?'block':'none';
  }catch(e){}
  s_pass.value='';s_otapass.value='';
+}
+async function setPass(){
+ const p=s_otapass.value;
+ if(!p||p.length<4){$('msg').textContent='Password must be at least 4 characters';$('msg').style.display='block';return;}
+ try{const r=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:p})});
+  if(r.status===401){const j=await r.json().catch(()=>({}));$('msg').textContent=(j.error||'Authentication required')+' — log in (browser prompt) then retry.';$('msg').style.display='block';return;}
+  const j=await r.json().catch(()=>({}));
+  $('msg').textContent=j.ok?'Password set.':'Error: '+(j.error||'failed');
+  $('msg').style.display='block';s_otapass.value='';loadSettings();
+ }catch(e){$('msg').textContent='Error: '+e;$('msg').style.display='block';}
 }
 function ledSet(v){jpost('/api/control',{led:v}).then(async()=>{
  try{const c=await jget('/api/settings');
@@ -623,9 +640,8 @@ function ledSet(v){jpost('/api/control',{led:v}).then(async()=>{
 async function otLog(){try{const r=await fetch('/api/otlog');const j=await r.json();$('otlog').textContent=(j.lines||[]).join('\n')||'(empty — waiting for frames)';}catch(e){$('otlog').textContent='error: '+e;}}
 async function saveSettings(){
  const b={device_name:s_name.value,mqtt_host:s_host.value,mqtt_port:+s_port.value,
- mqtt_user:s_user.value,mqtt_prefix:s_prefix.value||'hcs'};
+ mqtt_user:s_user.value,mqtt_prefix:s_prefix.value||'hcs',auth_enabled:s_auth.checked};
  if(s_pass.value)b.mqtt_pass=s_pass.value;
- if(s_otapass.value)b.ota_password=s_otapass.value;
  await jpost('/api/settings',b);
  const m=$('msg');m.style.display='block';m.textContent='Saved. Rebooting…';
  setTimeout(()=>location.reload(),9000);
@@ -888,7 +904,9 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     return o == h;
   };
 
-  // All mutating endpoints require the admin/OTA password when one is set.
+  // Control-plane auth. When enabled, mutating endpoints require the admin
+  // password. While no password is set they challenge, so the only unblocked
+  // action is the portal's first-run "create password" flow (/api/auth).
   auto authOk = [this]() -> bool {
     if (server.hasHeader("Origin") &&
         !originMatches(server.header("Origin"), server.hostHeader())) {
@@ -896,11 +914,8 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
                   "{\"ok\":false,\"error\":\"cross-origin rejected\"}");
       return false;
     }
+    if (!liveCfg().auth_enabled) return true;
     if (liveCfg().ota_password.length() == 0) {
-      // No user password set → fall back to the MAC-derived default instead
-      // of leaving the device open (secure by default, recoverable).
-      String pw = hcs_default_admin_password(WiFi.macAddress());
-      if (server.authenticate("admin", pw.c_str())) return true;
       server.requestAuthentication();
       return false;
     }
@@ -908,6 +923,37 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     server.requestAuthentication();
     return false;
   };
+
+  // First-run / change admin password. Open while no password is set (or auth
+  // is disabled); requires the current credentials once a password exists.
+  server.on("/api/auth", HTTP_POST, [this, authOk]() {
+    if (server.hasHeader("Origin") &&
+        !originMatches(server.header("Origin"), server.hostHeader())) {
+      server.send(403, "application/json",
+                  "{\"ok\":false,\"error\":\"cross-origin rejected\"}");
+      return;
+    }
+    HcsSettings& cfg = shared_ ? *shared_ : settings_;
+    if (cfg.auth_enabled && cfg.ota_password.length() && !authOk()) return;
+    JsonDocument d;
+    if (deserializeJson(d, server.arg("plain"))) {
+      server.send(400, "application/json", "{\"ok\":false,\"error\":\"bad json\"}");
+      return;
+    }
+    String pw = d["password"] | "";
+    pw = hcs_trim(pw);
+    if (pw.length() < 4) {
+      server.send(400, "application/json",
+                  "{\"ok\":false,\"error\":\"password too short (min 4)\"}");
+      return;
+    }
+    cfg.ota_password = pw;
+    SettingsStore store;
+    store.begin();
+    store.save(cfg);
+    if (cfg_report_) cfg_report_(settingsSnapshotJson());
+    server.send(200, "application/json", "{\"ok\":true}");
+  });
 
   server.on("/api/control", HTTP_POST, [this, authOk]() {
     if (!authOk()) return;
@@ -1009,7 +1055,8 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     j += "\"led_enable\":" + String(live.led_enable ? "true" : "false") + ",";
     j += "\"led_brightness\":" + String(live.led_brightness) + ",";
     j += "\"ota_password_set\":" +
-         String(live.ota_password.length() ? "true" : "false");
+         String(live.ota_password.length() ? "true" : "false") + ",";
+    j += "\"auth_enabled\":" + String(live.auth_enabled ? "true" : "false");
     j += "}";
     server.send(200, "application/json", j);
   });
@@ -1421,7 +1468,8 @@ String NetServices::settingsSnapshotJson() const {
   j += "\"mqtt_user_set\":" + String(isSet(s.mqtt_user) ? "true" : "false") + ",";
   j += "\"mqtt_prefix\":\"" + esc(s.mqtt_prefix) + "\",";
   j += "\"ota_password_set\":" +
-       String(s.ota_password.length() ? "true" : "false");
+       String(s.ota_password.length() ? "true" : "false") + ",";
+  j += "\"auth_enabled\":" + String(s.auth_enabled ? "true" : "false");
   j += "}";
   return j;
 }
@@ -1451,6 +1499,7 @@ bool NetServices::applySettingsJson(const String& json) {
   }
   if ((v = d["ota_password"] | (const char*)nullptr))
     cfg.ota_password = String(v).substring(0, 31);
+  if (d["auth_enabled"].is<bool>()) cfg.auth_enabled = d["auth_enabled"].as<bool>();
 
   SettingsStore store;
   store.begin();
