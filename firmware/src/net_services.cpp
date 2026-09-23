@@ -210,6 +210,12 @@ bool NetServices::beginWifi(HcsSettings& settings) {
       settings.mqtt_pass = p_mqtt_pass.getValue();
     String pref = hcs_trim(p_prefix.getValue());
     if (pref.length()) settings.mqtt_prefix = pref;
+  }
+  // Device name + admin/OTA password are independent of the MQTT broker: a
+  // standalone OT-only device must still be able to set its name and secure
+  // itself (previously these were silently dropped when MQTT host was empty,
+  // leaving a user who set a password actually unauthenticated).
+  {
     String nm = hcs_trim(p_name.getValue());
     if (nm.length()) settings.device_name = nm;
     if (strlen(p_ota.getValue())) settings.ota_password = p_ota.getValue();

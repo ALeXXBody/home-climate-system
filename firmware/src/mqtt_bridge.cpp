@@ -179,14 +179,21 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
       // Never act on empty retained leftovers; require a real payload edge.
       if (payload.length() == 0) break;
       HCS_LOG("mqtt", "reboot command received");
+      clearRetained(topic);  // don't re-fire on reconnect after the restart
       delay(150);
       ESP.restart();
       break;
     case HCS_CMD_OTA_URL:
-      if (ota_cb_ && payload.length()) ota_cb_(payload);
+      if (ota_cb_ && payload.length()) {
+        clearRetained(topic);  // one-shot: don't re-flash on every reconnect
+        ota_cb_(payload);
+      }
       break;
     case HCS_CMD_SETTINGS:
-      if (settings_cb_ && payload.length()) settings_cb_(payload);
+      if (settings_cb_ && payload.length()) {
+        clearRetained(topic);  // one-shot: apply once, then clear
+        settings_cb_(payload);
+      }
       break;
     case HCS_CMD_LED:
       if (led_cb_ && payload.length()) led_cb_(payload);
@@ -210,6 +217,13 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
 
 void MqttBridge::publish(const String& topic, const String& payload, bool retain) {
   mqtt_.publish(topic.c_str(), payload.c_str(), retain);
+}
+
+void MqttBridge::clearRetained(const String& topic) {
+  // Empty retained publish removes the broker's retained copy, so a one-shot
+  // command (reboot / ota_url / settings) is not re-delivered on the next
+  // (re)subscribe and re-executed (boot loop / repeated re-flash).
+  mqtt_.publish(topic.c_str(), "", true);
 }
 
 static String f2(float v) {

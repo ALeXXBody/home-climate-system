@@ -99,7 +99,13 @@ unsigned long OtMaster::receiveFrame_(unsigned long timeout_ms) {
               resp = (resp << 1) | (lvl ? 0u : 1u);  // !readState()
               bits++;
             } else {
-              // stop-bit edge → frame complete
+              // stop-bit edge → frame complete. Validate the OpenTherm
+              // parity bit (bit 31): a single-bit line error otherwise
+              // passes through as a wrong temperature/setpoint.
+              if (OpenTherm::parity(resp)) {
+                last_status_ = OpenThermResponseStatus::INVALID;
+                return 0;
+              }
               last_status_ = OpenThermResponseStatus::SUCCESS;
               return resp;
             }

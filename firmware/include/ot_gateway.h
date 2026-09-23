@@ -58,6 +58,7 @@ class OtGateway {
   OtMaster& m_;
   OtSlave slave_;
   GatewayRouter rt_;
+  unsigned long last_probe_ms_ = 0;  // cooldown for the link self-heal probe
 };
 
 }  // namespace hcs

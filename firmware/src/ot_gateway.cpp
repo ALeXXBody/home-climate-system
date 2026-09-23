@@ -26,6 +26,9 @@ static uint32_t localAnswer(uint8_t req_type, uint8_t id, uint16_t data,
   return OpenTherm::buildResponse(ack, (OpenThermMessageID)id, data);
 }
 
+/** How often the gateway re-probes a boiler link that was marked down. */
+constexpr unsigned long kGwLinkProbeMs = 5000;
+
 uint32_t OtGateway::handleRequest(uint32_t req) {
   using MT = OpenThermMessageType;
 
@@ -33,10 +36,28 @@ uint32_t OtGateway::handleRequest(uint32_t req) {
   const uint8_t id = frameId(req);
   const uint16_t data = OpenTherm::getUInt(req);
 
+  // Self-heal: while the boiler link is believed down, route() answers every
+  // request locally and never forwards — so a single transient timeout would
+  // otherwise wedge the gateway in "boiler permanently down" mode with no way
+  // for setBoilerLinkUp(true) to ever be reached. Periodically force one
+  // forward probe: re-arm the link for that single request so route()
+  // forwards it (and applies the setpoint override), then let the sendRaw
+  // result set the link state for real.
+  bool probing = false;
+  if (!rt_.boilerLinkUp()) {
+    unsigned long now = millis();
+    if (now - last_probe_ms_ >= kGwLinkProbeMs) {
+      last_probe_ms_ = now;
+      probing = true;
+      rt_.setBoilerLinkUp(true);  // one-shot re-arm; outcome below settles it
+    }
+  }
+
   uint16_t out = 0;
   GwPolicy pol = rt_.route(type, id, data, &out);
 
   if (pol == GwPolicy::AnswerLocal) {
+    if (probing) rt_.setBoilerLinkUp(false);  // reverted before answering
     return localAnswer(type, id, out, rt_.local_answer_known());
   }
 

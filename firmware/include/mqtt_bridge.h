@@ -119,4 +119,7 @@ class MqttBridge {
 
   void handleCommand(const String& topic, const String& payload);
   void publish(const String& topic, const String& payload, bool retain = false);
+  /** Publish an empty retained message to *topic* to clear the broker's
+   *  retained copy (stops a one-shot command re-firing on reconnect). */
+  void clearRetained(const String& topic);
 };
