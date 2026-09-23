@@ -868,17 +868,33 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   });
 
 
+  // Exact-origin CSRF guard: reject browser requests whose Origin authority
+  // does not match this device's Host exactly. (A substring match — the old
+  // indexOf — let an attacker use "http://<ip>.attacker.com" as Origin and
+  // slip past the drive-by check.)
+  static auto originMatches = [](const String& origin,
+                                 const String& hostHeader) -> bool {
+    if (!origin.length() || !hostHeader.length()) return true;  // non-browser
+    String o = origin;
+    o.toLowerCase();
+    int scheme = o.indexOf("://");
+    if (scheme >= 0) o = o.substring(scheme + 3);
+    int slash = o.indexOf('/');
+    if (slash >= 0) o = o.substring(0, slash);
+    if (o.endsWith(":80")) o = o.substring(0, o.length() - 3);  // default port
+    String h = hostHeader;
+    h.toLowerCase();
+    if (h.endsWith(":80")) h = h.substring(0, h.length() - 3);
+    return o == h;
+  };
+
   // All mutating endpoints require the admin/OTA password when one is set.
   auto authOk = [this]() -> bool {
-    if (server.hasHeader("Origin")) {
-      String origin = server.header("Origin");
-      String host = server.hostHeader();
-      if (origin.length() && host.length() &&
-          origin.indexOf(host) < 0) {
-        server.send(403, "application/json",
-                    "{\"ok\":false,\"error\":\"cross-origin rejected\"}");
-        return false;
-      }
+    if (server.hasHeader("Origin") &&
+        !originMatches(server.header("Origin"), server.hostHeader())) {
+      server.send(403, "application/json",
+                  "{\"ok\":false,\"error\":\"cross-origin rejected\"}");
+      return false;
     }
     if (liveCfg().ota_password.length() == 0) return true;
     if (server.authenticate("admin", liveCfg().ota_password.c_str())) return true;
@@ -1002,12 +1018,8 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
                 "{\"ok\":true,\"message\":\"saved, rebooting\"}");
   });
 
-  server.on("/api/ota", HTTP_POST, [this]() {
-    if (liveCfg().ota_password.length()) {
-      if (!server.authenticate("admin", liveCfg().ota_password.c_str())) {
-        return server.requestAuthentication();
-      }
-    }
+  server.on("/api/ota", HTTP_POST, [this, authOk]() {
+    if (!authOk()) return;
     String body = server.arg("plain");
     String url;
     if (server.hasArg("url")) url = server.arg("url");
@@ -1447,6 +1459,28 @@ bool NetServices::applySettingsJson(const String& json) {
 bool NetServices::startHttpUpdate(const String& url) {
   // Reentrancy guard: MQTT + HTTP fallback can both deliver the command.
   if (ota_busy_) return false;
+  // Reject non-http(s) schemes and loopback/link-local hosts (SSRF to cloud
+  // metadata / internal services). LAN mirrors (private IPs, .local names)
+  // are unchanged.
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    HCS_LOG("ota", "rejected — scheme not http/https");
+    return false;
+  }
+  {
+    String host = url.substring(url.indexOf("://") + 3);
+    int cut = 0;
+    while (cut < (int)host.length() && host[cut] != '/' && host[cut] != ':' &&
+           host[cut] != '?')
+      cut++;
+    host = host.substring(0, cut);
+    host.toLowerCase();
+    if (host.length() == 0 || host == "localhost" ||
+        host.startsWith("127.") || host.startsWith("169.254.") ||
+        host == "[::1]" || host == "::1") {
+      HCS_LOG("ota", "rejected — unsafe host");
+      return false;
+    }
+  }
   // Reboot-race guard: a settings save / gw change / api/reboot that is
   // already scheduled must win — an OTA racing it writes a fresh image
   // mid-reboot and has wedged boards in the past (see 1.5.4→1.5.5 window).
