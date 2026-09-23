@@ -83,6 +83,23 @@ Full steps: [docs/flash.md](docs/flash.md) · [Wiki — Flash](docs/wiki/Flash-a
 
 Full contract: [protocol/mqtt.md](protocol/mqtt.md) · [Wiki — MQTT](docs/wiki/MQTT-protocol.md)
 
+## Security
+
+- **Web control plane** (`http://<ip>/`): authentication is on by default. On first
+  run the Settings page prompts to create an admin password; once set, mutating
+  actions prompt for login (in-page form + session cookie, or HTTP Basic via
+  `curl -u admin:<pass>`). It can be toggled off from Settings → *Enable
+  authentication*. The default password is the MAC-derived `hcs<mac>` until you
+  set your own.
+- **MQTT command channel**: the device honours `mqtt_user` / `mqtt_pass` (set them
+  in the portal). The residual risk is the *broker* — any client that can publish
+  to `hcs/<node>/set/#` can drive the board. Restrict that topic (and
+  `hcs/<node>/set/settings`, `…/ota_url`, `…/reboot`) with broker ACLs so only the
+  Home Climate Control integration can write commands.
+- **Known limitation**: firmware images are fetched over your LAN mirror without
+  an on-device signature check — keep the mirror on a trusted network and the
+  admin password set.
+
 ## Docs
 
 - **[Docs wiki](docs/wiki/Home.md)** — [Hardware](docs/wiki/Hardware.md) · [Flash](docs/wiki/Flash-and-first-boot.md) · [Web UI](docs/wiki/Web-UI.md) · [MQTT](docs/wiki/MQTT-protocol.md) · [WC](docs/wiki/Weather-compensation.md) · [1-Wire](docs/wiki/1-Wire-sensors.md) · [Failsafe](docs/wiki/Failsafe.md) · [Gateway](docs/wiki/Gateway-mode.md) · [OTA](docs/wiki/OTA.md) · [Boards](docs/wiki/Boards-and-builds.md) · [Troubleshooting](docs/wiki/Troubleshooting.md) · [Changelog](docs/wiki/Changelog.md)  
