@@ -121,6 +121,7 @@ void MqttBridge::subscribeAll() {
   mqtt_.subscribe(hcsSetTopic(node_id_, "ota_url").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "settings").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "reboot").c_str());
+  mqtt_.subscribe(hcsSetTopic(node_id_, "led").c_str());
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   mqtt_.subscribe(hcsSetTopic(node_id_, "gw/set_mode").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "gw/override_setpoint").c_str());
@@ -268,9 +269,21 @@ void MqttBridge::publishCtl() {
 
 void MqttBridge::publishDiscovery() {
   // Retained discovery JSON for HA Firmware tab
+  auto esc = [](const String& v) {
+    String o;
+    o.reserve(v.length() + 8);
+    for (unsigned i = 0; i < v.length(); ++i) {
+      char c = v[i];
+      if (c == '"' || c == '\\') { o += '\\'; o += c; }
+      else if (c == '\n') o += "\\n";
+      else if (c == '\r') {}
+      else o += c;
+    }
+    return o;
+  };
   String j = "{";
   j += "\"node_id\":\"" + node_id_ + "\",";
-  j += "\"name\":\"" + (device_name_.length() ? device_name_ : node_id_) + "\",";
+  j += "\"name\":\"" + esc(device_name_.length() ? device_name_ : node_id_) + "\",";
   j += "\"board\":\"" + String(HCS_BOARD_NAME) + "\",";
   j += "\"version\":\"" + String(HCS_FW_VERSION) + "\",";
   j += "\"ip\":\"" + ip_ + "\",";

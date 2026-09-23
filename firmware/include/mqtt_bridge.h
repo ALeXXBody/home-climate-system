@@ -40,7 +40,14 @@ class MqttBridge {
 
   void begin(const char* host, uint16_t port, const char* user, const char* pass);
   void loop();
-  void setNodeId(const String& id) { node_id_ = id; }
+  void setNodeId(const String& id) {
+    node_id_ = id;
+    // The node id is embedded in MQTT topics: never allow wildcard/level
+    // chars (defense-in-depth — the current caller passes a MAC-derived id).
+    node_id_.replace("/", "_");
+    node_id_.replace("+", "_");
+    node_id_.replace("#", "_");
+  }
   void setDeviceInfo(const String& name, const String& ip);
   const String& nodeId() const { return node_id_; }
 

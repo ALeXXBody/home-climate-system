@@ -191,9 +191,9 @@ void OtMaster::noteStatusFail_() {
   if (was && !snap_.valid) {
 #if defined(ESP32) || defined(ESP8266)
     HCS_LOG("ot", "link DOWN (streak=%u rssi=%d dBm)",
-            status_fail_streak_, WiFi.RSSI());
+            (unsigned)status_fail_streak_, WiFi.RSSI());
 #else
-    HCS_LOG("ot", "link DOWN (streak=%u)", status_fail_streak_);
+    HCS_LOG("ot", "link DOWN (streak=%u)", (unsigned)status_fail_streak_);
 #endif
   }
 }
