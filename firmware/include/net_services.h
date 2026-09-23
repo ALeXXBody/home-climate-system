@@ -154,6 +154,7 @@ class NetServices {
   String reset_reason_ = "unknown";
   String last_reboot_reason_;
   uint8_t unclean_boots_ = 0;
+  String session_token_;  // active web session token (empty = none)
 
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   hcs::OtGateway* gw_ = nullptr;

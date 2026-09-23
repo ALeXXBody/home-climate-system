@@ -23,6 +23,20 @@ namespace hcs {
 SysLog g_log;
 }
 
+/** Unpredictable per-boot session token (single admin session). */
+static String randomSessionToken() {
+  uint32_t a = 0;
+#if defined(ESP32)
+  a = (uint32_t)esp_random();
+#else
+  a = (uint32_t)random(RAND_MAX) ^ ((uint32_t)micros());
+#endif
+  uint32_t b = (uint32_t)micros();
+  char buf[24];
+  snprintf(buf, sizeof(buf), "%08lx%08lx", (unsigned long)a, (unsigned long)b);
+  return String(buf);
+}
+
 #if defined(ESP8266)
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
@@ -284,6 +298,16 @@ input[type=range]{padding:0;height:34px}
 footer{text-align:center;color:#666;font-size:.75rem;margin-top:24px}
 a{color:#03a9f4;text-decoration:none}
 </style></head><body>
+<div id=login_overlay style="position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;z-index:99">
+<div style="background:#1a1d23;padding:1.5rem;border-radius:8px;width:20rem;max-width:90vw">
+<h3 style="margin:0 0 .75rem">Log in</h3>
+<input id=login_pass type=password placeholder="Admin password" autocomplete=current-password style="width:100%;box-sizing:border-box;margin-bottom:.75rem">
+<div style="display:flex;gap:.5rem">
+<button class=a onclick="doLogin()">Log in</button>
+<button class=g onclick="hideLogin()">Cancel</button>
+</div>
+<div id=login_err style="color:#ef5350;font-size:.85rem;margin-top:.5rem"></div>
+</div></div>
 <header><h1 id=devname>Home Climate</h1><span class="badge b-off" id=fsb style="display:none">FAILSAFE</span><span class="badge b-off" id=otb>OT ?</span></header>
 <nav>
 <button data-t=status class=act>Status</button>
@@ -293,6 +317,7 @@ a{color:#03a9f4;text-decoration:none}
 <button data-t=settings>Settings</button>
 <button data-t=system>System</button>
 <button data-t=log>Log</button>
+<button style="margin-left:auto" onclick="doLogout()">Log out</button>
 </nav>
 <section id=t-status class=act>
 <div class=grid>
@@ -485,7 +510,16 @@ those were the old self-heal path (disabled from v1.4.4; probe only logs).
 <script>
 const $=id=>document.getElementById(id);
 async function jget(u){const r=await fetch(u);if(!r.ok)throw r.status;return r.json()}
-async function jpost(u,b){const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});try{return await r.json()}catch(e){return{ok:r.ok}}}
+async function jpost(u,b){const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});if(r.status===401){showLogin();throw 401}try{return await r.json()}catch(e){return{ok:r.ok}}}
+function showLogin(){login_err.textContent='';login_overlay.style.display='flex';login_pass.focus()}
+function hideLogin(){login_overlay.style.display='none';login_pass.value=''}
+async function doLogin(){
+ const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:login_pass.value})});
+ const j=await r.json().catch(()=>({}));
+ if(r.ok){hideLogin();location.reload();}
+ else login_err.textContent=j.error||'Login failed';
+}
+async function doLogout(){await fetch('/api/logout',{method:'POST'});location.reload();}
 function yn(v){return v?'ON':'OFF'}
 let last=null;
 function paint(s){
@@ -625,7 +659,7 @@ async function setPass(){
  const p=s_otapass.value;
  if(!p||p.length<4){$('msg').textContent='Password must be at least 4 characters';$('msg').style.display='block';return;}
  try{const r=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:p})});
-  if(r.status===401){const j=await r.json().catch(()=>({}));$('msg').textContent=(j.error||'Authentication required')+' — log in (browser prompt) then retry.';$('msg').style.display='block';return;}
+  if(r.status===401){showLogin();return;}
   const j=await r.json().catch(()=>({}));
   $('msg').textContent=j.ok?'Password set.':'Error: '+(j.error||'failed');
   $('msg').style.display='block';s_otapass.value='';loadSettings();
@@ -919,10 +953,58 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
       server.requestAuthentication();
       return false;
     }
+    // In-page session cookie first, then HTTP Basic (curl -u ...).
+    if (session_token_.length()) {
+      String c = server.header("Cookie");
+      int i = c.indexOf("hcs_session=");
+      if (i >= 0) {
+        String tok = c.substring(i + 12);
+        int semi = tok.indexOf(';');
+        if (semi >= 0) tok = tok.substring(0, semi);
+        if (tok == session_token_) return true;
+      }
+    }
     if (server.authenticate("admin", liveCfg().ota_password.c_str())) return true;
-    server.requestAuthentication();
+    server.send(401, "application/json", "{\"ok\":false,\"error\":\"unauthorized\"}");
     return false;
   };
+
+  // Web login: exchange the admin password for a session cookie.
+  server.on("/api/login", HTTP_POST, [this]() {
+    if (server.hasHeader("Origin") &&
+        !originMatches(server.header("Origin"), server.hostHeader())) {
+      server.send(403, "application/json",
+                  "{\"ok\":false,\"error\":\"cross-origin rejected\"}");
+      return;
+    }
+    const HcsSettings& cfg = liveCfg();
+    if (!cfg.auth_enabled) {
+      server.send(200, "application/json", "{\"ok\":true}");
+      return;
+    }
+    JsonDocument d;
+    if (deserializeJson(d, server.arg("plain"))) {
+      server.send(400, "application/json", "{\"ok\":false,\"error\":\"bad json\"}");
+      return;
+    }
+    String pw = d["password"] | "";
+    if (pw.length() == 0 || pw != cfg.ota_password) {
+      server.send(401, "application/json", "{\"ok\":false,\"error\":\"wrong password\"}");
+      return;
+    }
+    session_token_ = randomSessionToken();
+    server.sendHeader("Set-Cookie",
+                      "hcs_session=" + session_token_ +
+                          "; HttpOnly; SameSite=Strict; Path=/");
+    server.send(200, "application/json", "{\"ok\":true}");
+  });
+
+  server.on("/api/logout", HTTP_POST, [this]() {
+    session_token_ = "";
+    server.sendHeader("Set-Cookie",
+                      "hcs_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0");
+    server.send(200, "application/json", "{\"ok\":true}");
+  });
 
   // First-run / change admin password. Open while no password is set (or auth
   // is disabled); requires the current credentials once a password exists.
