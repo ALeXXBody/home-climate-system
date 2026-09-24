@@ -18,6 +18,11 @@
 #include <WiFiManager.h>
 #include <ArduinoOTA.h>
 #include <LittleFS.h>
+#if defined(ESP32)
+#include <HTTPClient.h>
+#include <Update.h>
+#include "ota_verify.h"
+#endif
 
 namespace hcs {
 SysLog g_log;
@@ -1639,6 +1644,7 @@ bool NetServices::startHttpUpdate(const String& url) {
   otaMarkTarget(url);
   otaReport("starting", 0, "");
 
+#if defined(ESP8266)
   auto progress = [this](int cur, int total) {
     if (total <= 0) return;
     int pct = (int)((long long)cur * 100 / total);
@@ -1650,15 +1656,26 @@ bool NetServices::startHttpUpdate(const String& url) {
       otaReport("downloading", pct, "");
     }
   };
+#endif
 
+#if defined(ESP32)
+  // Signed + streamed update (mbedtls ECDSA P-256 over SHA-256). Keeps the
+  // OpenTherm loop fed during the download and refuses to boot an image whose
+  // signature does not match the baked-in public key.
+  bool ok = signedHttpUpdate(url);
+#if defined(HCS_LOOP_WDT)
+  esp_task_wdt_add(nullptr);  // re-arm the loop watchdog after OTA
+#endif
+  ota_busy_ = false;
+  return ok;
+#elif defined(ESP8266)
   // Scheme-aware client: TLS only for https:// URLs. Plain-LAN mirrors
   // (and any http:// source) must NOT be spoken TLS to.
   const bool use_tls = url.startsWith("https");
-  t_httpUpdate_return ret;
-#if defined(ESP8266)
   ESPhttpUpdate.rebootOnUpdate(false);  // we publish "done", then reboot
   ESPhttpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   ESPhttpUpdate.onProgress(progress);
+  t_httpUpdate_return ret;
   if (use_tls) {
     WiFiClientSecure client;
     client.setInsecure();  // release assets are md5-verified upstream
@@ -1669,32 +1686,11 @@ bool NetServices::startHttpUpdate(const String& url) {
     client.setTimeout(12);
     ret = ESPhttpUpdate.update(client, url);
   }
-#elif defined(ESP32)
-  httpUpdate.rebootOnUpdate(false);
-  httpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  httpUpdate.onProgress(progress);
-  if (use_tls) {
-    WiFiClientSecure client;
-    client.setInsecure();
-    ret = httpUpdate.update(client, url);
-  } else {
-    WiFiClient client;
-    ret = httpUpdate.update(client, url);
-  }
-#else
-  ota_busy_ = false;
-  return false;
-#endif
 
   switch (ret) {
     case HTTP_UPDATE_FAILED: {
-#if defined(ESP8266)
       String err = ESPhttpUpdate.getLastErrorString();
       int code = (int)ESPhttpUpdate.getLastError();
-#else
-      String err = httpUpdate.getLastErrorString();
-      int code = (int)httpUpdate.getLastError();
-#endif
       Serial.printf("[ota] fail (%d) %s\n", code, err.c_str());
       String msg = err.length() ? err : "update failed";
       msg += " (code " + String(code) + ")";
@@ -1711,12 +1707,134 @@ bool NetServices::startHttpUpdate(const String& url) {
       scheduleReboot(1200, "ota complete");  // let the "done" report drain first
       break;
   }
-#if defined(ESP32) && defined(HCS_LOOP_WDT)
-  esp_task_wdt_add(nullptr);  // re-arm the loop watchdog after OTA
-#endif
   ota_busy_ = false;
   return ret == HTTP_UPDATE_OK;
+#else
+  ota_busy_ = false;
+  return false;
+#endif
 }
+
+#if defined(ESP32)
+bool NetServices::signedHttpUpdate(const String& url) {
+  // 1) Fetch the 64-byte signature (sibling of the image).
+  HTTPClient sigCli;
+  sigCli.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  sigCli.begin(url + ".sig");
+  int sig_code = sigCli.GET();
+  uint8_t sig[64];
+  bool have_sig = false;
+  if (sig_code == HTTP_CODE_OK && sigCli.getSize() == 64) {
+    int got = 0;
+    WiFiClient* s = sigCli.getStreamPtr();
+    while (got < 64 && s && s->available()) {
+      int n = s->read(sig + got, 64 - got);
+      if (n <= 0) break;
+      got += n;
+    }
+    have_sig = (got == 64);
+  }
+  sigCli.end();
+  if (!have_sig) {
+    Serial.println(F("[ota] no .sig alongside image — refusing unsigned update"));
+    otaReport("failed", -1, "signature (.sig) missing");
+    return false;
+  }
+
+  // 2) Stream the image into the OTA slot, hashing as we go.
+  HTTPClient cli;
+  cli.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  cli.begin(url);
+  int code = cli.GET();
+  if (code != HTTP_CODE_OK) {
+    Serial.printf("[ota] download failed (HTTP %d)\n", code);
+    cli.end();
+    otaReport("failed", -1, "download failed");
+    return false;
+  }
+  int total = cli.getSize();
+  if (total <= 0) {
+    Serial.println(F("[ota] unknown content length — refusing"));
+    cli.end();
+    otaReport("failed", -1, "unknown content length");
+    return false;
+  }
+
+  mbedtls_sha256_context sha;
+  mbedtls_sha256_init(&sha);
+  mbedtls_sha256_starts_ret(&sha, 0);
+
+  if (!Update.begin(total)) {
+    cli.end();
+    mbedtls_sha256_free(&sha);
+    otaReport("failed", -1, "Update.begin failed");
+    return false;
+  }
+
+  WiFiClient* stream = cli.getStreamPtr();
+  uint8_t buf[1024];
+  int written = 0;
+  bool ok = true;
+  ota_last_progress_ = -1;
+  while (cli.connected() && written < total) {
+    if (stream && stream->available()) {
+      int n = stream->read(buf, sizeof(buf));
+      if (n > 0) {
+        mbedtls_sha256_update_ret(&sha, buf, n);
+        if (Update.write(buf, n) != (size_t)n) {
+          ok = false;
+          break;
+        }
+        written += n;
+        int pct = (int)((long long)written * 100 / total);
+        unsigned long now = millis();
+        if (pct != ota_last_progress_ &&
+            (pct - ota_last_progress_ >= 4 ||
+             now - ota_last_report_ms_ >= 500 || pct >= 100)) {
+          ota_last_progress_ = pct;
+          otaReport("downloading", pct, "");
+        }
+        // Keep OpenTherm alive while the download blocks the loop.
+        ot_.poll();
+      }
+    } else {
+      delay(2);
+    }
+    yield();
+  }
+  cli.end();
+
+  if (!ok || written != total) {
+    Update.abort();
+    mbedtls_sha256_free(&sha);
+    otaReport("failed", -1, "download interrupted");
+    return false;
+  }
+
+  uint8_t digest[32];
+  mbedtls_sha256_finish_ret(&sha, digest);
+  mbedtls_sha256_free(&sha);
+
+  // 3) Verify the ECDSA signature over the digest before booting.
+  if (!hcs_ota_verify_signature(digest, sig)) {
+    Update.abort();
+    Serial.println(F("[ota] SIGNATURE VERIFICATION FAILED — image rejected"));
+    otaReport("failed", -1, "signature verification failed");
+    return false;
+  }
+
+  // 4) Finalize (sets the boot partition) and reboot.
+  if (!Update.end(true)) {
+    Serial.println(F("[ota] Update.end failed"));
+    otaReport("failed", -1, "Update.end failed");
+    return false;
+  }
+  Serial.println(F("[ota] signature verified — rebooting"));
+  otaReport("done", 100, "");
+  scheduleReboot(1200, "ota complete");
+  return true;
+}
+#endif
 
 void NetServices::scheduleReboot(unsigned long delayMs, const char* reason) {
   reboot_pending_ = true;

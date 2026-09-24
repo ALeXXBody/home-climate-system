@@ -93,10 +93,24 @@ jobs:
           path: assets
           merge-multiple: true
 
+      - name: Sign firmware images (ESP32)
+        env:
+          OTA_SIGNING_KEY: ${{ secrets.OTA_SIGNING_KEY }}
+        run: |
+          set -e
+          pip install -q cryptography
+          for f in assets/*.bin; do
+            case "$f" in
+              *d1_mini.bin) ;;                       # ESP8266 — unsigned legacy path
+              *) python3 scripts/sign_firmware.py sign "$f" ;;
+            esac
+          done
+          ls -la assets/
+
       - name: Attach to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -la assets/
           gh release create "$GITHUB_REF_NAME" --verify-tag --draft=false --generate-notes || true
-          gh release upload "$GITHUB_REF_NAME" assets/*.bin --clobber
+          gh release upload "$GITHUB_REF_NAME" assets/*.bin assets/*.bin.sig --clobber

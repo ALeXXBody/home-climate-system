@@ -9,5 +9,9 @@ firmware/.pio/
 firmware/include/secrets.h
 *.bin
 *.elf
+*.sig
+# Firmware-signing keys: the private key must never leave the build machine.
+ota_secret.key
+ota_public.pem
 # but ship the flasher images to GitHub Pages
 !docs/flasher/**/*.bin

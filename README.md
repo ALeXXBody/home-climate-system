@@ -96,9 +96,11 @@ Full contract: [protocol/mqtt.md](protocol/mqtt.md) · [Wiki — MQTT](docs/wiki
   to `hcs/<node>/set/#` can drive the board. Restrict that topic (and
   `hcs/<node>/set/settings`, `…/ota_url`, `…/reboot`) with broker ACLs so only the
   Home Climate Control integration can write commands.
-- **Known limitation**: firmware images are fetched over your LAN mirror without
-  an on-device signature check — keep the mirror on a trusted network and the
-  admin password set.
+- **OTA image verification (ESP32)**: firmware images are ECDSA-signed. The board
+  streams the image to the OTA slot, hashes it, and verifies the signature against
+  a baked-in public key before booting — a tampered or MITM'd image is rejected.
+  Release images are signed with `scripts/sign_firmware.py`; a `.sig` must sit
+  alongside each `.bin` on the mirror. (ESP8266 keeps the legacy unsigned path.)
 
 ## Docs
 

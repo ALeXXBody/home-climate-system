@@ -162,4 +162,9 @@ class NetServices {
 
   void scheduleReboot(unsigned long delayMs = 500,
                       const char* reason = "scheduled");
+#if defined(ESP32)
+  /** Signed, streamed firmware update: download .bin (+ .sig), hash it,
+   *  verify the ECDSA signature against the baked-in key, then boot it. */
+  bool signedHttpUpdate(const String& url);
+#endif
 };
