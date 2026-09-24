@@ -334,7 +334,10 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
   if (!isnan(ot_.dhwSetpoint()))
     publish(hcsTopic(node_id_, "dhw_setpoint"), f2(ot_.dhwSetpoint()), true);
 
-  // Boiler diagnostics -> retained clean text + raw numbers (change-gated)
+  // Boiler diagnostics -> retained clean text + raw numbers.
+  // Published every telemetry tick (NOT change-gated): a static-String latch
+  // could leave the broker's retained copy stuck at the boot-time "no data"
+  // long after ASF/OEM became valid, so the HA sensor read a stale value.
   {
     hcs::BoilerDiag bd;
     bd.valid_asf = s.valid_asf;
@@ -343,28 +346,17 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
     bd.oem = s.oem_diag;
     char txt[160];
     hcs::boiler_diag_text(bd, txt, sizeof(txt));
-    static String last_txt, last_state;
-    String state = hcs::boiler_diag_state(bd);
-    String txt_s = String(txt);
-    if (txt_s != last_txt) {
-      publish(hcsTopic(node_id_, "boiler_diag"), txt, true);
-      publish(hcsTopic(node_id_, "boiler_state"), state, true);
-      last_txt = txt_s;
-      last_state = state;
-    }
+    publish(hcsTopic(node_id_, "boiler_diag"), txt, true);
+    publish(hcsTopic(node_id_, "boiler_state"), hcs::boiler_diag_state(bd), true);
   }
 
   // Failsafe live state (retained)
   if (fs_state_ptr_) {
-    static String last_fs;
     String v =
         (*fs_state_ptr_ == hcs::FsState::FAILSAFE)
             ? "ON"
             : (*fs_state_ptr_ == hcs::FsState::HOLD ? "HOLD" : "OFF");
-    if (v != last_fs) {
-      publish(hcsTopic(node_id_, "failsafe"), v, true);
-      last_fs = v;
-    }
+    publish(hcsTopic(node_id_, "failsafe"), v, true);
   }
 
   // Boiler identity + fault history (retained, change-gated)
