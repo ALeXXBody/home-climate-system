@@ -1896,6 +1896,7 @@ void NetServices::otaMarkTarget(const String& url) {
   otaRollLoad_();
   roll_target_url_ = url;
   roll_pending_    = true;
+  roll_saw_health_ = false;  // re-arm health latch for the new image
   otaRollSave_();
   HCS_LOG("roll", "target marked attempt=%u", roll_attempts_ + 1);
 }
@@ -1905,9 +1906,15 @@ void NetServices::otaRollbackTick() {
   if (!roll_pending_) return;
   const unsigned long up = millis();
   const bool mqtt_ok = mqtt_ok_fn_ ? mqtt_ok_fn_() : false;
+  // A board that is exchanging OpenTherm frames with the boiler is
+  // demonstrably alive, even if MQTT is momentarily down — a broker/network
+  // blip must not cause a healthy image to be reverted.
+  const bool ot_ok = ot_.snap().valid;
 
-  if (up >= OTA_CONFIRM_AFTER_MS && mqtt_ok) {
-    HCS_LOG("roll", "image confirmed healthy via MQTT");
+  if (mqtt_ok || ot_ok) roll_saw_health_ = true;
+
+  if (up >= OTA_CONFIRM_AFTER_MS && roll_saw_health_) {
+    HCS_LOG("roll", "image confirmed healthy (mqtt=%d ot=%d)", mqtt_ok, ot_ok);
     roll_good_url_    = roll_target_url_;
     roll_target_url_  = "";
     roll_attempts_    = 0;
@@ -1916,7 +1923,7 @@ void NetServices::otaRollbackTick() {
     return;
   }
 
-  if (up >= OTA_REVERT_AFTER_MS && !mqtt_ok) {
+  if (up >= OTA_REVERT_AFTER_MS && !roll_saw_health_) {
     if (roll_attempts_ + 1 >= OTA_MAX_ATTEMPTS || roll_good_url_.length() == 0) {
       HCS_LOG("roll", "give up revert attempts=%u", roll_attempts_);
       roll_pending_ = false;

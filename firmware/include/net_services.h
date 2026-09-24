@@ -127,6 +127,7 @@ class NetServices {
   String   roll_target_url_;
   String   roll_good_url_;
   bool     roll_loaded_ = false;
+  bool     roll_saw_health_ = false;  // MQTT or OT observed healthy this boot
   bool http_started_ = false;
   String node_id_;
   HcsSettings settings_;
