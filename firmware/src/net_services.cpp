@@ -442,7 +442,7 @@ publishes a named sensor to Home Assistant. Health is re-checked every poll
 <div id=auth_banner style="display:none;background:#3a2a1a;border:1px solid #8a6a3a;color:#f0d9a0;padding:8px;border-radius:6px;margin:8px 0">
 <b>No admin password set.</b> Create one below to protect this device.
 </div>
-<label><input type=checkbox id=s_auth style="width:auto;margin-right:6px">Enable authentication</label>
+<label><input type=checkbox id=s_auth style="width:auto;margin-right:6px" onchange="toggleAuth()">Enable authentication</label>
 <label>Admin password</label><input id=s_otapass maxlength=31 type=password autocomplete=new-password placeholder=(set password)>
 <button class=g onclick="setPass()">Set password</button>
 <button class=a onclick="saveSettings()">Save &amp; reboot</button>
@@ -670,6 +670,16 @@ async function setPass(){
   $('msg').style.display='block';s_otapass.value='';loadSettings();
  }catch(e){$('msg').textContent='Error: '+e;$('msg').style.display='block';}
 }
+async function toggleAuth(){
+ const want=s_auth.checked;
+ try{const r=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:want})});
+  if(r.status===401){showLogin();s_auth.checked=!want;return;}
+  const j=await r.json().catch(()=>({}));
+  const m=$('msg');m.style.display='block';
+  m.textContent=j.ok?(want?'Authentication enabled.':'Authentication disabled — password no longer required.'):('Error: '+(j.error||'failed'));
+  loadSettings();
+ }catch(e){$('msg').textContent='Error: '+e;$('msg').style.display='block';s_auth.checked=!want;}
+}
 function ledSet(v){jpost('/api/control',{led:v}).then(async()=>{
  try{const c=await jget('/api/settings');
   s_led.textContent=v==='off'?'off':(c.led_enable?'on':'on');
@@ -679,7 +689,7 @@ function ledSet(v){jpost('/api/control',{led:v}).then(async()=>{
 async function otLog(){try{const r=await fetch('/api/otlog');const j=await r.json();$('otlog').textContent=(j.lines||[]).join('\n')||'(empty — waiting for frames)';}catch(e){$('otlog').textContent='error: '+e;}}
 async function saveSettings(){
  const b={device_name:s_name.value,mqtt_host:s_host.value,mqtt_port:+s_port.value,
- mqtt_user:s_user.value,mqtt_prefix:s_prefix.value||'hcs',auth_enabled:s_auth.checked};
+ mqtt_user:s_user.value,mqtt_prefix:s_prefix.value||'hcs'};
  if(s_pass.value)b.mqtt_pass=s_pass.value;
  await jpost('/api/settings',b);
  const m=$('msg');m.style.display='block';m.textContent='Saved. Rebooting…';
@@ -1021,20 +1031,35 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
       return;
     }
     HcsSettings& cfg = shared_ ? *shared_ : settings_;
-    if (cfg.auth_enabled && cfg.ota_password.length() && !authOk()) return;
     JsonDocument d;
     if (deserializeJson(d, server.arg("plain"))) {
       server.send(400, "application/json", "{\"ok\":false,\"error\":\"bad json\"}");
       return;
     }
-    String pw = d["password"] | "";
-    pw = hcs_trim(pw);
-    if (pw.length() < 4) {
-      server.send(400, "application/json",
-                  "{\"ok\":false,\"error\":\"password too short (min 4)\"}");
+
+    const bool has_enabled = d["enabled"].is<bool>();
+    const bool disabling = has_enabled && !d["enabled"].as<bool>();
+
+    // Turning auth OFF must never require authentication — otherwise the
+    // user can be locked out of disabling it (the "still asks for password"
+    // bug). Enabling auth or changing the password needs current credentials.
+    if (!disabling && cfg.auth_enabled && cfg.ota_password.length() && !authOk()) {
       return;
     }
-    cfg.ota_password = pw;
+
+    if (has_enabled) cfg.auth_enabled = d["enabled"].as<bool>();
+
+    if (d["password"].is<const char*>()) {
+      String pw = d["password"] | "";
+      pw = hcs_trim(pw);
+      if (pw.length() < 4) {
+        server.send(400, "application/json",
+                    "{\"ok\":false,\"error\":\"password too short (min 4)\"}");
+        return;
+      }
+      cfg.ota_password = pw;
+    }
+
     SettingsStore store;
     store.begin();
     store.save(cfg);
