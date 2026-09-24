@@ -101,7 +101,7 @@ jobs:
           pip install -q cryptography
           for f in assets/*.bin; do
             case "$f" in
-              *d1_mini.bin) ;;                       # ESP8266 — unsigned legacy path
+              */firmware-d1_mini.bin) ;;               # ESP8266 — unsigned legacy path
               *) python3 scripts/sign_firmware.py sign "$f" ;;
             esac
           done
