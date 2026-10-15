@@ -530,11 +530,15 @@ void setup() {
         .idle_core_mask = 0,
         .trigger_panic = true,
     };
-    if (esp_task_wdt_reconfigure(&wdt_cfg) != ESP_OK) {
-      esp_task_wdt_init(&wdt_cfg);
-    }
+    // reconfigure() exists only in newer IDF minors — deinit+init is the
+    // form both the early v5 series and v5.2+ accept.
+    esp_task_wdt_deinit();
+    esp_err_t e = esp_task_wdt_init(&wdt_cfg);
+#else
+    esp_task_wdt_init(20, true);
     esp_err_t e = esp_task_wdt_add(nullptr);  // current task = loopTask
 #endif
+    e = esp_task_wdt_add(nullptr);  // current task = loopTask
     const char* es = "armed";
     if (e == ESP_ERR_NO_MEM) es = "no memory";
     else if (e == ESP_ERR_INVALID_ARG) es = "invalid arg";
