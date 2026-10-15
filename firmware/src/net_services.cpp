@@ -1802,7 +1802,12 @@ bool NetServices::signedHttpUpdate(const String& url) {
   if (!Update.begin(total)) {
     cli.end();
     MB_SHA_free(&sha);
-    otaReport("failed", -1, "Update.begin failed");
+    // Not enough OTA space for this image size — the running partition
+    // table is smaller than the image. OTA can never rewrite the table;
+    // a size failure here is the board telling the hub the truth.
+    otaReport("failed", -1,
+              "no OTA slot for " + String(total) +
+                  " B (partition table too small — needs a USB flash)");
     return false;
   }
 

@@ -69,6 +69,28 @@ jobs:
             echo "::error::stale version string found alongside '$VER'"; exit 1
           fi
 
+      - name: Image size budget (per-env OTA slot reality; see platformio.ini)
+        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: firmware
+        run: |
+          # d1_mini (ESP8266): stock 4 MB slot headroom.
+          # esp32_d1_mini(+gw): OTA-updatable fleet — must fit the stock
+          #   1310720 B OTA slot, because OTA cannot rewrite the partition
+          #   table; deployed boards still run the stock one.
+          # All other envs: not yet deployed → first flash is USB with the
+          #   enlarged table (app slots 1441792 B), so their budget is that.
+          case "${{ matrix.env }}" in
+            d1_mini) LIMIT=980000 ;;
+            esp32_d1_mini|esp32_d1_mini_gw) LIMIT=1310720 ;;
+            *) LIMIT=1441792 ;;
+          esac
+          SIZE=$(stat -c%s .pio/build/${{ matrix.env }}/firmware.bin)
+          echo "${{ matrix.env }}: $SIZE bytes (limit $LIMIT)"
+          if [ "$SIZE" -gt "$LIMIT" ]; then
+            echo "::error::image $SIZE B exceeds the ${{ matrix.env }} OTA budget $LIMIT B — shrink the build instead of shipping an update boards cannot install"
+            exit 1
+          fi
+
       - name: Rename artifact for release
         if: startsWith(github.ref, 'refs/tags/v')
         run: cp firmware/.pio/build/${{ matrix.env }}/firmware.bin firmware-${{ matrix.env }}.bin
