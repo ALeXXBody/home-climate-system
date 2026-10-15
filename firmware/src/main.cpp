@@ -534,12 +534,7 @@ void setup() {
       esp_task_wdt_init(&wdt_cfg);
     }
     esp_err_t e = esp_task_wdt_add(nullptr);  // current task = loopTask
-#else
-    esp_task_wdt_init(20, true);
-    esp_err_t e = esp_task_wdt_add(nullptr);  // current task = loopTask
 #endif
-    if (e != ESP_OK) e = esp_task_wdt_init(&wdt_cfg);
-    e = esp_task_wdt_add(nullptr);  // current task = loopTask
     const char* es = "armed";
     if (e == ESP_ERR_NO_MEM) es = "no memory";
     else if (e == ESP_ERR_INVALID_ARG) es = "invalid arg";
