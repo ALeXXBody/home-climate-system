@@ -521,14 +521,23 @@ void setup() {
   // now triggers an automatic reset, so the OT master recovers in seconds
   // instead of minutes (see 1.5.6-test build notes).
   {
-    // Default IDF config watches idle tasks at 5 s — re-arm at 20 s, panic on.
-    // IDF v5+: the old (uint32 timeout, bool panic) signature is gone.
+    // Default IDF config watches idle tasks at 5 s — re-arm at 20 s, panic
+    // on. The WDT API changed sign paths between IDF v4/v5: compile for
+    // whichever the toolchain provides so CI and local builds agree.
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
     esp_task_wdt_config_t wdt_cfg = {
         .timeout_ms = 20000,
         .idle_core_mask = 0,
         .trigger_panic = true,
     };
-    esp_err_t e = esp_task_wdt_reconfigure(&wdt_cfg);
+    if (esp_task_wdt_reconfigure(&wdt_cfg) != ESP_OK) {
+      esp_task_wdt_init(&wdt_cfg);
+    }
+    esp_err_t e = esp_task_wdt_add(nullptr);  // current task = loopTask
+#else
+    esp_task_wdt_init(20, true);
+    esp_err_t e = esp_task_wdt_add(nullptr);  // current task = loopTask
+#endif
     if (e != ESP_OK) e = esp_task_wdt_init(&wdt_cfg);
     e = esp_task_wdt_add(nullptr);  // current task = loopTask
     const char* es = "armed";

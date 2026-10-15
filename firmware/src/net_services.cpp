@@ -1801,7 +1801,16 @@ bool NetServices::signedHttpUpdate(const String& url) {
 
   mbedtls_sha256_context sha;
   mbedtls_sha256_init(&sha);
-  mbedtls_sha256_starts(&sha, 0);
+#if (MBEDTLS_VERSION_MAJOR < 3)
+#define MB_SHA_starts mbedtls_sha256_starts_ret
+#define MB_SHA_update mbedtls_sha256_update_ret
+#define MB_SHA_finish mbedtls_sha256_finish_ret
+#else
+#define MB_SHA_starts mbedtls_sha256_starts
+#define MB_SHA_update mbedtls_sha256_update
+#define MB_SHA_finish mbedtls_sha256_finish
+#endif
+  MB_SHA_starts(&sha, 0);
 
   if (!Update.begin(total)) {
     cli.end();
@@ -1833,7 +1842,7 @@ bool NetServices::signedHttpUpdate(const String& url) {
       int n = stream->read(buf, sizeof(buf));
       if (n > 0) {
         last_progress_ms = millis();
-        mbedtls_sha256_update(&sha, buf, n);
+        MB_SHA_update(&sha, buf, n);
         if (Update.write(buf, n) != (size_t)n) {
           ok = false;
           break;
@@ -1865,7 +1874,7 @@ bool NetServices::signedHttpUpdate(const String& url) {
   }
 
   uint8_t digest[32];
-  mbedtls_sha256_finish(&sha, digest);
+  MB_SHA_finish(&sha, digest);
   mbedtls_sha256_free(&sha);
 
   // 3) Verify the ECDSA signature over the digest before booting.
