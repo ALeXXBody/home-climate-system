@@ -1004,9 +1004,16 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     }
     String pw = d["password"] | "";
     if (pw.length() == 0 || pw != cfg.ota_password) {
+      login_failures_++;
+      if (login_failures_ >= 5) {
+        login_lockout_until_ = millis() + 60000UL;  // 60 s lockout
+        login_failures_ = 0;
+      }
       server.send(401, "application/json", "{\"ok\":false,\"error\":\"wrong password\"}");
       return;
     }
+    login_failures_ = 0;
+    login_lockout_until_ = 0;
     session_token_ = randomSessionToken();
     server.sendHeader("Set-Cookie",
                       "hcs_session=" + session_token_ +
@@ -1058,6 +1065,10 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
         return;
       }
       cfg.ota_password = pw;
+      // Rotating the password must kill any stolen active session.
+      session_token_ = "";
+      login_failures_ = 0;
+      login_lockout_until_ = 0;
     }
 
     SettingsStore store;
@@ -1666,7 +1677,6 @@ bool NetServices::startHttpUpdate(const String& url) {
   ota_last_progress_ = -1;
 
   Serial.printf("[ota] pulling %s\n", url.c_str());
-  otaMarkTarget(url);
   otaReport("starting", 0, "");
 
 #if defined(ESP8266)
@@ -1719,11 +1729,13 @@ bool NetServices::startHttpUpdate(const String& url) {
       Serial.printf("[ota] fail (%d) %s\n", code, err.c_str());
       String msg = err.length() ? err : "update failed";
       msg += " (code " + String(code) + ")";
+      roll_target_url_ = ""; roll_pending_ = false;
       otaReport("failed", -1, msg);
       break;
     }
     case HTTP_UPDATE_NO_UPDATES:
       Serial.println(F("[ota] no updates"));
+      roll_target_url_ = ""; roll_pending_ = false;
       otaReport("failed", -1, "server sent no update image");
       break;
     case HTTP_UPDATE_OK:
@@ -1762,6 +1774,7 @@ bool NetServices::signedHttpUpdate(const String& url) {
   sigCli.end();
   if (!have_sig) {
     Serial.println(F("[ota] no .sig alongside image — refusing unsigned update"));
+    roll_target_url_ = ""; roll_pending_ = false;
     otaReport("failed", -1, "signature (.sig) missing");
     return false;
   }
@@ -1774,6 +1787,7 @@ bool NetServices::signedHttpUpdate(const String& url) {
   if (code != HTTP_CODE_OK) {
     Serial.printf("[ota] download failed (HTTP %d)\n", code);
     cli.end();
+    roll_target_url_ = ""; roll_pending_ = false;
     otaReport("failed", -1, "download failed");
     return false;
   }
@@ -1787,7 +1801,7 @@ bool NetServices::signedHttpUpdate(const String& url) {
 
   mbedtls_sha256_context sha;
   mbedtls_sha256_init(&sha);
-  mbedtls_sha256_starts_ret(&sha, 0);
+  mbedtls_sha256_starts(&sha, 0);
 
   if (!Update.begin(total)) {
     cli.end();
@@ -1800,12 +1814,26 @@ bool NetServices::signedHttpUpdate(const String& url) {
   uint8_t buf[1024];
   int written = 0;
   bool ok = true;
+  unsigned long last_progress_ms = millis();
   ota_last_progress_ = -1;
   while (cli.connected() && written < total) {
+    // Stall watchdog: a mirror that stops mid-body (proxy blip, hung
+    // remote) used to freeze the device for good — the loop only escaped
+    // on FIN/EOF. Abort when no bytes arrive for 15 s.
+    if (millis() - last_progress_ms > 15000UL) {
+      Serial.println(F("[ota] stream stalled >15 s — aborting"));
+      Update.abort();
+      cli.end();
+      mbedtls_sha256_free(&sha);
+      roll_target_url_ = ""; roll_pending_ = false;
+      otaReport("failed", -1, "download stalled");
+      return false;
+    }
     if (stream && stream->available()) {
       int n = stream->read(buf, sizeof(buf));
       if (n > 0) {
-        mbedtls_sha256_update_ret(&sha, buf, n);
+        last_progress_ms = millis();
+        mbedtls_sha256_update(&sha, buf, n);
         if (Update.write(buf, n) != (size_t)n) {
           ok = false;
           break;
@@ -1837,7 +1865,7 @@ bool NetServices::signedHttpUpdate(const String& url) {
   }
 
   uint8_t digest[32];
-  mbedtls_sha256_finish_ret(&sha, digest);
+  mbedtls_sha256_finish(&sha, digest);
   mbedtls_sha256_free(&sha);
 
   // 3) Verify the ECDSA signature over the digest before booting.
@@ -1855,6 +1883,8 @@ bool NetServices::signedHttpUpdate(const String& url) {
     return false;
   }
   Serial.println(F("[ota] signature verified — rebooting"));
+  // The image is flashed AND verified — NOW it earns a rollback target.
+  otaMarkTarget(url);
   otaReport("done", 100, "");
   scheduleReboot(1200, "ota complete");
   return true;

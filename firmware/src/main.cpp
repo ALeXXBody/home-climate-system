@@ -244,24 +244,37 @@ static void applyGwRole(bool gateway) {
 StatusLed status_led;  // diagnostic patterns — see hcs_status_led.h
 
 /** LED command from MQTT or web UI: "on"/"off" or brightness 1-255. */
+static unsigned long last_led_save_ms = 0;
+
 static void applyLedPayload(const String& payload) {
   if (payload.isEmpty()) return;
+  bool changed = false;
   if (payload.equalsIgnoreCase("on")) {
     status_led.setEnabled(true);
+    changed = !settings.led_enable;
     settings.led_enable = true;
   } else if (payload.equalsIgnoreCase("off")) {
     status_led.setEnabled(false);
+    changed = settings.led_enable;
     settings.led_enable = false;
   } else {
     long v = payload.toInt();
     if (v < 1) v = 1;
     if (v > 255) v = 255;
+    if ((uint8_t)v != settings.led_brightness) changed = true;
     status_led.setBrightness((uint8_t)v);
     settings.led_brightness = (uint8_t)v;
   }
-  SettingsStore st;
-  st.begin();
-  st.save(settings);
+  // Sliders ramp: dozens of messages per gesture. Each full settings save
+  // used to rewrite the whole NVS blob (wear + loop-blocking flash op).
+  // Debounce persistence: apply instantly, save at most every 30 s.
+  unsigned long now = millis();
+  if (changed && now - last_led_save_ms >= 30000UL) {
+    last_led_save_ms = now;
+    SettingsStore st;
+    st.begin();
+    st.save(settings);
+  }
   HCS_LOG("led", "set: %s", payload.c_str());
 }
 
@@ -509,12 +522,19 @@ void setup() {
   // instead of minutes (see 1.5.6-test build notes).
   {
     // Default IDF config watches idle tasks at 5 s — re-arm at 20 s, panic on.
-    esp_task_wdt_init(20, true);
-    esp_err_t e = esp_task_wdt_add(nullptr);  // current task = loopTask
+    // IDF v5+: the old (uint32 timeout, bool panic) signature is gone.
+    esp_task_wdt_config_t wdt_cfg = {
+        .timeout_ms = 20000,
+        .idle_core_mask = 0,
+        .trigger_panic = true,
+    };
+    esp_err_t e = esp_task_wdt_reconfigure(&wdt_cfg);
+    if (e != ESP_OK) e = esp_task_wdt_init(&wdt_cfg);
+    e = esp_task_wdt_add(nullptr);  // current task = loopTask
     const char* es = "armed";
     if (e == ESP_ERR_NO_MEM) es = "no memory";
     else if (e == ESP_ERR_INVALID_ARG) es = "invalid arg";
-    else if (e != ESP_OK) es = "failed";
+    else if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) es = "failed";
     HCS_LOG("boot", "loop WDT %s (20 s feed window)", es);
   }
 #endif

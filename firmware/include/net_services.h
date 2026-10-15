@@ -156,6 +156,8 @@ class NetServices {
   String last_reboot_reason_;
   uint8_t unclean_boots_ = 0;
   String session_token_;  // active web session token (empty = none)
+  unsigned long login_lockout_until_ = 0;  // millis; brute-force lockout
+  int login_failures_ = 0;
 
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   hcs::OtGateway* gw_ = nullptr;

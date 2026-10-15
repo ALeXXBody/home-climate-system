@@ -204,8 +204,13 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
       if (gw_mode_cb_) gw_mode_cb_((uint8_t)r.int_value);
       break;
     case HCS_CMD_GW_OVERRIDE_SETPOINT:
-      if (gw_override_cb_)
-        gw_override_cb_(r.bool_value ? r.float_value : (float)NAN);
+      if (gw_override_cb_) {
+        float c = r.bool_value ? r.float_value : (float)NAN;
+        // Clamp like the HTTP path: a stray/typo'd payload must not
+        // forward an out-of-range TSet to the boiler every poll.
+        if (!isnan(c)) c = constrain(c, 20.0f, 90.0f);
+        gw_override_cb_(c);
+      }
       break;
 #endif
     case HCS_CMD_FAILSAFE_CFG:

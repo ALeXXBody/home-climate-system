@@ -212,6 +212,14 @@ void OtMaster::writeTSet_() {
   } else {
     wc_target_ = NAN;
   }
+  // WC targets can exceed the boiler's learned MaxTSet bounds (fmax up to
+  // 90 °C while the real boiler caps at 80). Re-clamp on every write so
+  // the WC branch cannot issue out-of-spec setpoints.
+  {
+    target = hcs::ot_clamp_with_bounds(target, snap_.valid_maxtset_bounds,
+                                       (float)snap_.maxtset_lb,
+                                       (float)snap_.maxtset_ub, 20.0f, 90.0f);
+  }
   unsigned int data = OpenTherm::temperatureToData(target);
   xchg_(OpenTherm::buildRequest(OpenThermMessageType::WRITE_DATA,
                                 OpenThermMessageID::TSet, data));
