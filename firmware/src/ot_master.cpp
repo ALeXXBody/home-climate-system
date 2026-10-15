@@ -147,6 +147,19 @@ void OtMaster::loop() {
 void OtMaster::setChEnable(bool on) { ch_enable_ = on; }
 void OtMaster::setDhwEnable(bool on) { dhw_enable_ = on; }
 
+void OtMaster::setDhwSetpoint(float c) {
+  // NAN = release ("off"/"auto") — never clamped.
+  if (isnan(c)) {
+    dhw_setpoint_ = c;
+    return;
+  }
+  float lo = snap_.valid_dhw_bounds ? (float)snap_.dhw_lb : 35.0f;
+  float hi = snap_.valid_dhw_bounds ? (float)snap_.dhw_ub : 60.0f;
+  if (lo < 1) lo = 1;
+  dhw_setpoint_ = hcs::ot_clamp_with_bounds(c, snap_.valid_dhw_bounds, lo, hi,
+                                            35.0f, 60.0f);
+}
+
 void OtMaster::setFlowSetpoint(float celsius) {
   if (isnan(celsius)) return;
   float lo = snap_.valid_maxtset_bounds ? (float)snap_.maxtset_lb : 10.0f;

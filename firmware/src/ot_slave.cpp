@@ -38,8 +38,7 @@ void IRAM_ATTR OtSlave::isr() {
         break;
       }
       if (dt > 750) {  // stop bit → frame complete
-        s->req_ = s->isr_bits_;
-        s->pending_ = true;
+        s->fifo_.push(s->isr_bits_);  // full → counts a drop, oldest kept
         s->isr_state_ = IS_READY;
       }
       break;
@@ -62,24 +61,27 @@ void OtSlave::begin() {
 void OtSlave::loop() {
   // Self-heal: a COLLECTING frame that stalls (no stop edge) ages out so
   // the decoder can't wedge on bus noise.
-  if (isr_state_ == COLLECTING && millis() - last_req_ms_ > 100 && !pending_) {
+  if (isr_state_ == COLLECTING && millis() - last_req_ms_ > 100 &&
+      fifo_.items() == 0) {
     isr_state_ = IS_READY;
   }
   service();
 }
 
 void OtSlave::service() {
-  if (!pending_ || !provider_) return;
+  if (!provider_) return;
+  uint32_t req;
+  if (!fifo_.pop(req)) return;
   // Respond ≥20 ms after the request ended, mirroring library behaviour.
-  if (millis() - last_req_ms_ < 20) return;
+  if (millis() - last_req_ms_ < 20) {
+    fifo_.push(req);  // put it back at the tail (writer may have added newer)
+    return;
+  }
 
-  uint32_t req = req_;
-  pending_ = false;
   isr_state_ = IS_READY;
   seen_++;
   last_req_ms_ = millis();
   valid_++;
-  req_ = req;
 
   uint32_t resp = provider_(req);
   if (!resp) {

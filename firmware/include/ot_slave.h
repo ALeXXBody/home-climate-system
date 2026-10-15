@@ -17,6 +17,7 @@
 #include "soc/gpio_struct.h"
 #include "soc/gpio_reg.h"
 #include "soc/soc.h"
+#include "hcs_ot_fifo.h"
 
 namespace hcs {
 
@@ -37,8 +38,10 @@ class OtSlave {
    */
   void onResponseProvider(ResponseProvider fn) { provider_ = fn; }
 
-  bool pending() const { return pending_; }
+  bool pending() const { return fifo_.items() != 0; }
   unsigned long lastRequestMs() const { return last_req_ms_; }
+  /** Master requests the loop was too slow to answer in time (ring full). */
+  uint32_t requestDrops() const { return fifo_.drops(); }
   uint32_t framesSeen() const { return seen_; }
   /** Frames that decoded as valid OpenTherm requests. */
   uint32_t validRequests() const { return valid_; }
@@ -72,8 +75,9 @@ class OtSlave {
   volatile uint32_t isr_bits_ = 0;
   volatile uint8_t isr_idx_ = 0;
 
-  volatile bool pending_ = false;
-  volatile uint32_t req_ = 0;      // latched master request frame
+  // Latched, not-yet-serviced master requests. ISR-only writer, loop-only
+  // reader (SPSC) — a burst of master requests is no longer overwritten.
+  OtFifo fifo_;
   unsigned long last_req_ms_ = 0;
   uint32_t seen_ = 0;
   uint32_t valid_ = 0;

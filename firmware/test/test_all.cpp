@@ -719,6 +719,78 @@ void test_fs_undo_forced_heat_only_after_failsafe(void) {
   TEST_ASSERT_TRUE(hcs::fs_undo_forced_heat(FsState::FAILSAFE));
 }
 
+
+// ── OT slave latch ring (hcs_ot_fifo.h) — back-to-back master requests ───
+// The old single-slot latch overwrote un-serviced frames in bursts.
+
+#include "hcs_ot_fifo.h"
+
+void test_otfifo_order_preserved(void) {
+  hcs::OtFifo f;
+  f.reset();
+  TEST_ASSERT_EQUAL_UINT8(0, f.items());
+  const uint32_t vals[4] = {0x80000107u, 0x10000026u, 0x800000f5u,
+                            0x0003642au};
+  for (int i = 0; i < 4; i++) TEST_ASSERT_TRUE(f.push(vals[i]));
+  TEST_ASSERT_EQUAL_UINT8(4, f.items());
+  uint32_t out = 999;
+  for (int i = 0; i < 4; i++) {
+    TEST_ASSERT_TRUE(f.pop(out));
+    TEST_ASSERT_EQUAL_UINT32(vals[i], out);
+  }
+  TEST_ASSERT_FALSE(f.pop(out));  // drained
+}
+
+void test_otfifo_full_rejects_and_counts(void) {
+  hcs::OtFifo f;
+  f.reset();
+  for (uint8_t i = 0; i < hcs::OtFifo::kCapacity - 1; i++)
+    TEST_ASSERT_TRUE(f.push((uint32_t)i));
+  TEST_ASSERT_FALSE(f.push(0xBEEFu));  // full: newest rejected, oldest kept
+  TEST_ASSERT_EQUAL_UINT8(hcs::OtFifo::kCapacity - 1, f.items());
+  TEST_ASSERT_EQUAL_UINT32(1, f.drops());
+}
+
+void test_otfifo_wraps_around(void) {
+  hcs::OtFifo f;
+  f.reset();
+  uint32_t out = 0, x = 0;
+  for (int i = 0; i < (int)hcs::OtFifo::kCapacity * 3 + 2; i++) {
+    TEST_ASSERT_TRUE(f.push(x));
+    TEST_ASSERT_TRUE(f.pop(out));
+    TEST_ASSERT_EQUAL_UINT32(x, out);
+    x += 0x01020304u;
+  }
+  TEST_ASSERT_EQUAL_UINT8(0, f.items());
+}
+
+void test_otfifo_reset_clears(void) {
+  hcs::OtFifo f;
+  f.reset();
+  TEST_ASSERT_TRUE(f.push(42u));
+  TEST_ASSERT_TRUE(f.push(43u));
+  f.reset();
+  uint32_t out = 0;
+  TEST_ASSERT_FALSE(f.pop(out));
+  TEST_ASSERT_EQUAL_UINT32(0, f.drops());
+  TEST_ASSERT_TRUE(f.push(7u));
+  TEST_ASSERT_TRUE(f.pop(out));
+  TEST_ASSERT_EQUAL_UINT32(7, out);
+}
+
+void test_otfifo_burst_keeps_all_Requests_on_slow_loop(void) {
+  // Simulate the ISR pushing a burst while loop() is busy: nothing lost.
+  hcs::OtFifo f;
+  f.reset();
+  const uint32_t burst[] = {1, 2, 3, 4, 5, 6, 7};
+  for (uint32_t v : burst) TEST_ASSERT_TRUE(f.push(v));
+  uint32_t out = 0;
+  for (uint32_t v : burst) {
+    TEST_ASSERT_TRUE(f.pop(out));
+    TEST_ASSERT_EQUAL_UINT32(v, out);
+  }
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_ch_enable_on_variants);
@@ -790,5 +862,10 @@ int main(void) {
   RUN_TEST(test_wifi_heal_short_outage_no_restart);
   RUN_TEST(test_wifi_heal_needs_forced_attempts);
   RUN_TEST(test_wifi_heal_wedged_triggers_restart);
+  RUN_TEST(test_otfifo_order_preserved);
+  RUN_TEST(test_otfifo_full_rejects_and_counts);
+  RUN_TEST(test_otfifo_wraps_around);
+  RUN_TEST(test_otfifo_reset_clears);
+  RUN_TEST(test_otfifo_burst_keeps_all_Requests_on_slow_loop);
   return UNITY_END();
 }

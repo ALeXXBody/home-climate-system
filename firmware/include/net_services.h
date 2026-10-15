@@ -165,9 +165,10 @@ class NetServices {
 
   void scheduleReboot(unsigned long delayMs = 500,
                       const char* reason = "scheduled");
-#if defined(ESP32)
+#if defined(ESP32) || defined(ESP8266)
   /** Signed, streamed firmware update: download .bin (+ .sig), hash it,
-   *  verify the ECDSA signature against the baked-in key, then boot it. */
+   *  verify the ECDSA signature against the baked-in key, then boot it.
+   *  ESP32 uses mbedtls, ESP8266 uses BearSSL — same public key. */
   bool signedHttpUpdate(const String& url);
 #endif
 };

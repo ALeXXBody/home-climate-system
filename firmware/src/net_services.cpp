@@ -22,6 +22,11 @@
 #include <HTTPClient.h>
 #include <Update.h>
 #include "ota_verify.h"
+#elif defined(ESP8266)
+#include <ESP8266HTTPClient.h>
+#include <Updater.h>
+#include "ota_verify.h"
+#include <bearssl/bearssl.h>
 #endif
 
 namespace hcs {
@@ -1693,71 +1698,36 @@ bool NetServices::startHttpUpdate(const String& url) {
   };
 #endif
 
-#if defined(ESP32)
-  // Signed + streamed update (mbedtls ECDSA P-256 over SHA-256). Keeps the
-  // OpenTherm loop fed during the download and refuses to boot an image whose
-  // signature does not match the baked-in public key.
+#if defined(ESP32) || defined(ESP8266)
+  // Signed + streamed update (ECDSA P-256 over SHA-256 — mbedtls on ESP32,
+  // BearSSL on ESP8266). Keeps the OpenTherm loop fed during the download
+  // and refuses to boot an image whose signature does not match the
+  // baked-in public key.
   bool ok = signedHttpUpdate(url);
-#if defined(HCS_LOOP_WDT)
+#if defined(ESP32) && defined(HCS_LOOP_WDT)
   esp_task_wdt_add(nullptr);  // re-arm the loop watchdog after OTA
 #endif
   ota_busy_ = false;
   return ok;
-#elif defined(ESP8266)
-  // Scheme-aware client: TLS only for https:// URLs. Plain-LAN mirrors
-  // (and any http:// source) must NOT be spoken TLS to.
-  const bool use_tls = url.startsWith("https");
-  ESPhttpUpdate.rebootOnUpdate(false);  // we publish "done", then reboot
-  ESPhttpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  ESPhttpUpdate.onProgress(progress);
-  t_httpUpdate_return ret;
-  if (use_tls) {
-    WiFiClientSecure client;
-    client.setInsecure();  // release assets are md5-verified upstream
-    client.setTimeout(12);
-    ret = ESPhttpUpdate.update(client, url);
-  } else {
-    WiFiClient client;
-    client.setTimeout(12);
-    ret = ESPhttpUpdate.update(client, url);
-  }
-
-  switch (ret) {
-    case HTTP_UPDATE_FAILED: {
-      String err = ESPhttpUpdate.getLastErrorString();
-      int code = (int)ESPhttpUpdate.getLastError();
-      Serial.printf("[ota] fail (%d) %s\n", code, err.c_str());
-      String msg = err.length() ? err : "update failed";
-      msg += " (code " + String(code) + ")";
-      roll_target_url_ = ""; roll_pending_ = false;
-      otaReport("failed", -1, msg);
-      break;
-    }
-    case HTTP_UPDATE_NO_UPDATES:
-      Serial.println(F("[ota] no updates"));
-      roll_target_url_ = ""; roll_pending_ = false;
-      otaReport("failed", -1, "server sent no update image");
-      break;
-    case HTTP_UPDATE_OK:
-      Serial.println(F("[ota] ok — rebooting"));
-      otaReport("done", 100, "");
-      scheduleReboot(1200, "ota complete");  // let the "done" report drain first
-      break;
-  }
-  ota_busy_ = false;
-  return ret == HTTP_UPDATE_OK;
 #else
   ota_busy_ = false;
   return false;
 #endif
 }
 
-#if defined(ESP32)
+#if defined(ESP32) || defined(ESP8266)
 bool NetServices::signedHttpUpdate(const String& url) {
   // 1) Fetch the 64-byte signature (sibling of the image).
   HTTPClient sigCli;
   sigCli.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+#if defined(ESP8266)
+  WiFiClient clientPlain;
+  WiFiClientSecure clientSecure;
+  WiFiClient& sigClient = url.startsWith("https") ? clientSecure : clientPlain;
+  sigCli.begin(sigClient, url + ".sig");  // ESP8266 requires the client arg
+#else
   sigCli.begin(url + ".sig");
+#endif
   int sig_code = sigCli.GET();
   uint8_t sig[64];
   bool have_sig = false;
@@ -1782,7 +1752,11 @@ bool NetServices::signedHttpUpdate(const String& url) {
   // 2) Stream the image into the OTA slot, hashing as we go.
   HTTPClient cli;
   cli.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+#if defined(ESP8266)
+  cli.begin(url.startsWith("https") ? clientSecure : clientPlain, url);
+#else
   cli.begin(url);
+#endif
   int code = cli.GET();
   if (code != HTTP_CODE_OK) {
     Serial.printf("[ota] download failed (HTTP %d)\n", code);
@@ -1799,6 +1773,7 @@ bool NetServices::signedHttpUpdate(const String& url) {
     return false;
   }
 
+#if defined(ESP32)
   mbedtls_sha256_context sha;
   mbedtls_sha256_init(&sha);
 #if (MBEDTLS_VERSION_MAJOR < 3)
@@ -1811,10 +1786,22 @@ bool NetServices::signedHttpUpdate(const String& url) {
 #define MB_SHA_finish mbedtls_sha256_finish
 #endif
   MB_SHA_starts(&sha, 0);
+  #define MB_SHA_free(cx) mbedtls_sha256_free(cx)
+#elif defined(ESP8266)
+  // BearSSL hash engine — interface differs from mbedtls, mapped onto the
+  // same MB_SHA_* macros so the streaming code is platform-neutral.
+  br_sha256_context sha;
+  br_sha256_init(&sha);
+  br_sha256_update(&sha, nullptr, 0);
+  #define MB_SHA_starts(cx, zero) ((void)(cx), (void)(zero))
+  #define MB_SHA_update(cx, data, len) br_sha256_update((cx), (data), (len))
+  #define MB_SHA_finish(cx, out) br_sha256_out((cx), (out))
+  #define MB_SHA_free(cx) ((void)0)
+#endif
 
   if (!Update.begin(total)) {
     cli.end();
-    mbedtls_sha256_free(&sha);
+    MB_SHA_free(&sha);
     otaReport("failed", -1, "Update.begin failed");
     return false;
   }
@@ -1831,9 +1818,13 @@ bool NetServices::signedHttpUpdate(const String& url) {
     // on FIN/EOF. Abort when no bytes arrive for 15 s.
     if (millis() - last_progress_ms > 15000UL) {
       Serial.println(F("[ota] stream stalled >15 s — aborting"));
+#if defined(ESP8266)
+      Update.end(false);  // partial write → Updater clears, boot unchanged
+#else
       Update.abort();
+#endif
       cli.end();
-      mbedtls_sha256_free(&sha);
+      MB_SHA_free(&sha);
       roll_target_url_ = ""; roll_pending_ = false;
       otaReport("failed", -1, "download stalled");
       return false;
@@ -1867,19 +1858,30 @@ bool NetServices::signedHttpUpdate(const String& url) {
   cli.end();
 
   if (!ok || written != total) {
+#if defined(ESP8266)
+    Update.end(false);  // partial write → Updater clears, boot unchanged
+#else
     Update.abort();
-    mbedtls_sha256_free(&sha);
+#endif
+    MB_SHA_free(&sha);
     otaReport("failed", -1, "download interrupted");
     return false;
   }
 
   uint8_t digest[32];
   MB_SHA_finish(&sha, digest);
-  mbedtls_sha256_free(&sha);
+  MB_SHA_free(&sha);
 
   // 3) Verify the ECDSA signature over the digest before booting.
   if (!hcs_ota_verify_signature(digest, sig)) {
+#if defined(ESP8266)
+    // Full image already written — do NOT call end() here: on ESP8266
+    // end() with the expected size COMMITs to eboot. Leaving the updater
+    // open never commits, so the old firmware keeps booting.
+    Serial.println(F("[ota] rejected before commit"));
+#else
     Update.abort();
+#endif
     Serial.println(F("[ota] SIGNATURE VERIFICATION FAILED — image rejected"));
     otaReport("failed", -1, "signature verification failed");
     return false;

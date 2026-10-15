@@ -93,17 +93,16 @@ jobs:
           path: assets
           merge-multiple: true
 
-      - name: Sign firmware images (ESP32)
+      - name: Sign all firmware images (ESP32 + ESP8266)
         env:
           OTA_SIGNING_KEY: ${{ secrets.OTA_SIGNING_KEY }}
         run: |
           set -e
           pip install -q cryptography
+          # v1.5.23: the ESP8266 board also verifies ECDSA on-device now, so
+          # every image ships signed; boards REFUSE an unsigned sibling.
           for f in assets/*.bin; do
-            case "$f" in
-              */firmware-d1_mini.bin) ;;               # ESP8266 — unsigned legacy path
-              *) python3 scripts/sign_firmware.py sign "$f" ;;
-            esac
+            python3 scripts/sign_firmware.py sign "$f"
           done
           ls -la assets/
 

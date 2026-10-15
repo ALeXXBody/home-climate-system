@@ -67,7 +67,10 @@ class OtMaster {
   const HcsWeatherComp& weatherCompCfg() const { return wc_; }
   float wcTarget() const { return wc_target_; }
 
-  void setDhwSetpoint(float c) { dhw_setpoint_ = c; }
+  /** Clamped at the command boundary against the boiler's learned DHW
+   *  bounds (35-60 °C until they are read). NAN releases control back to
+   *  the boiler/thermostat and stays NAN. */
+  void setDhwSetpoint(float c);
   float dhwSetpoint() const { return dhw_setpoint_; }
 
   void setFailsafeHeat(bool on) { failsafe_ = on; }
