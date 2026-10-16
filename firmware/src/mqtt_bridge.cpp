@@ -257,6 +257,10 @@ void MqttBridge::publishCtl() {
   j += "\"wc_fmax\":" + String(wc.flow_max, 1) + ",";
   j += "\"wc_fmin\":" + String(wc.flow_min, 1) + ",";
   j += "\"wc_target\":" + f_or_null(ot_.wcTarget());
+  // Learned CH ceiling in the retained mirror too: HCS-backend consumers
+  // that gather control state per node (the guaranteed-consumed channel).
+  j += ",\"tset_cap\":" +
+       (ot_.validTSetCap() ? f_or_null(ot_.tsetCap()) : String("null"));
   if (fs_state_ptr_) {
     j += ",\"fs_state\":\"" +
          String(*fs_state_ptr_ == hcs::FsState::FAILSAFE
