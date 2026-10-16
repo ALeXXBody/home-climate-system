@@ -334,6 +334,12 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
     publish(hcsTopic(node_id_, "outdoor_temp"), f2(s.outdoor_temp));
   if (!isnan(s.modulation))
     publish(hcsTopic(node_id_, "modulation"), f2(s.modulation));
+
+  // Boiler CH ceiling learned from TSet W-ACK echoes; "off" while unknown.
+  // Every telemetry tick (not change-gated) so the hub sees the cap lift
+  // within one heartbeat of the boiler being reconfigured.
+  publish(hcsTopic(node_id_, "tset_cap"),
+          ot_.validTSetCap() ? f2(ot_.tsetCap()) : String("off"));
   if (s.valid_pressure)
     publish(hcsTopic(node_id_, "ch_pressure"), f2(s.pressure_bar));
   if (!isnan(ot_.dhwSetpoint()))

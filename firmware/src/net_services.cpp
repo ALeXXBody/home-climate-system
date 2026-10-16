@@ -804,6 +804,9 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     doc["fault"] = s.fault;
     doc["flame"] = s.flame;
     doc["flow_setpoint"] = ot_.flowSetpoint();
+    doc["tset_cap"] = ot_.validTSetCap()
+                          ? String(ot_.tsetCap(), 1)
+                          : String((const char*)nullptr);
     doc["max_modulation"] = ot_.maxModulation();
 
     doc["wc_enable"] = ot_.weatherComp();

@@ -73,6 +73,12 @@ class OtMaster {
   void setDhwSetpoint(float c);
   float dhwSetpoint() const { return dhw_setpoint_; }
 
+  /** Boiler CH ceiling learned from TSet W-ACK echoes (false while the
+   *  boiler ACKs every request unchanged). Publication + wire clamp both
+   *  read these. */
+  bool validTSetCap() const { return valid_tset_cap_; }
+  float tsetCap() const { return tset_cap_; }
+
   void setFailsafeHeat(bool on) { failsafe_ = on; }
   bool failsafeHeat() const { return failsafe_; }
 
@@ -172,4 +178,8 @@ class OtMaster {
 #ifdef HCS_GW_ENABLE
   bool autopoll_ = true;
 #endif
+  bool valid_tset_cap_ = false;
+  float tset_cap_ = 0.0f;
+  uint8_t tset_confirm_ = 0;
+  uint16_t tset_probe_ctr_ = 0;
 };

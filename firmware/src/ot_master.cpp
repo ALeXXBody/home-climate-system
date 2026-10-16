@@ -233,9 +233,27 @@ void OtMaster::writeTSet_() {
                                        (float)snap_.maxtset_lb,
                                        (float)snap_.maxtset_ub, 20.0f, 90.0f);
   }
-  unsigned int data = OpenTherm::temperatureToData(target);
-  xchg_(OpenTherm::buildRequest(OpenThermMessageType::WRITE_DATA,
-                                OpenThermMessageID::TSet, data));
+  // Learned echo cap: this boiler ACKs TSet writes with the value it
+  // actually stored — an echo below the request is its real ceiling.
+  // Wire writes are clamped to it; every ~5 min one unclamped probe write
+  // re-tests so a re-configured boiler lifts the cap automatically.
+  bool probe = valid_tset_cap_ && (++tset_probe_ctr_ % 300 == 0);
+  float effective =
+      (valid_tset_cap_ && !probe)
+          ? hcs::ot_tset_cap_apply(valid_tset_cap_, tset_cap_, target)
+          : target;
+  unsigned int data = OpenTherm::temperatureToData(effective);
+  unsigned long resp = xchg_(OpenTherm::buildRequest(
+      OpenThermMessageType::WRITE_DATA, OpenThermMessageID::TSet, data));
+  if (xchgOk_() &&
+      OpenTherm::getDataID(resp) == OpenThermMessageID::TSet &&
+      OpenTherm::getMessageType(resp) ==
+          OpenThermMessageType::WRITE_ACK) {
+    float echoed =
+        (float)OpenTherm::getUInt(resp) / 256.0f;
+    hcs::ot_tset_echo_learn(valid_tset_cap_, tset_cap_, tset_confirm_,
+                            target, echoed);
+  }
 }
 
 void OtMaster::readFloat_(OpenThermMessageID id, float& dest, float lo,

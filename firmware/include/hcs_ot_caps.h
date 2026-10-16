@@ -62,4 +62,42 @@ inline void ot_fhb_format(const uint8_t* codes, uint8_t n, char* out,
   }
 }
 
+
+/**
+ * Learned CH setpoint ceiling from TSet write-ACK echoes.
+ *
+ * Some boilers ACK a TSet write with the value they actually stored — a
+ * lower echo is their real, undocumented ceiling (a physical knob or
+ * firmware limit the OT capabilities don't advertise). Three consecutive
+ * lower echoes latch the cap; an echo back at/above the desired value
+ * clears it, so a re-configured boiler lifts the clamp automatically.
+ */
+inline float ot_tset_cap_apply(bool have_cap, float cap, float want) {
+  return (have_cap && cap < want) ? cap : want;
+}
+
+inline void ot_tset_echo_learn(bool& have_cap, float& cap, uint8_t& confirm,
+                               float want, float echoed) {
+  const float tol = 0.45f;  // 0.5 °C grid, minus float noise
+  if (!have_cap) {
+    if (echoed < want - tol) {
+      if (++confirm >= 3) {
+        have_cap = true;
+        cap = echoed;
+        confirm = 0;
+      }
+    } else {
+      confirm = 0;
+    }
+    return;
+  }
+  if (echoed >= want - tol) {
+    have_cap = false;  // the boiler accepted the full request again
+    cap = 0.0f;
+    confirm = 0;
+    return;
+  }
+  if (echoed > cap + tol) cap = echoed;  // boiler raised its own ceiling
+}
+
 }  // namespace hcs

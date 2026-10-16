@@ -791,6 +791,55 @@ void test_otfifo_burst_keeps_all_Requests_on_slow_loop(void) {
   }
 }
 
+
+
+// ── TSet W-ACK echo cap learning (hcs_ot_caps.h) ─────────────────────────
+// A boiler that ACKs 75 °C requests with 55.0 is silently capped at 55.
+
+void test_tset_echo_cap_latches_after_three(void) {
+  bool have = false; float cap = 0; uint8_t n = 0;
+  hcs::ot_tset_echo_learn(have, cap, n, 75.0f, 55.0f);
+  TEST_ASSERT_FALSE(have);
+  hcs::ot_tset_echo_learn(have, cap, n, 75.0f, 55.0f);
+  TEST_ASSERT_FALSE(have);
+  hcs::ot_tset_echo_learn(have, cap, n, 75.0f, 55.0f);
+  TEST_ASSERT_TRUE(have);
+  TEST_ASSERT_EQUAL_FLOAT(55.0f, cap);
+  TEST_ASSERT_EQUAL_FLOAT(55.0f,
+      hcs::ot_tset_cap_apply(have, cap, 75.0f));   // wire gets 55
+  TEST_ASSERT_EQUAL_FLOAT(40.0f,
+      hcs::ot_tset_cap_apply(have, cap, 40.0f));   // lower request untouched
+}
+
+void test_tset_echo_cap_not_latched_by_single_echo(void) {
+  bool have = false; float cap = 0; uint8_t n = 0;
+  hcs::ot_tset_echo_learn(have, cap, n, 75.0f, 55.0f);
+  hcs::ot_tset_echo_learn(have, cap, n, 75.0f, 74.9f);  // accepted once
+  hcs::ot_tset_echo_learn(have, cap, n, 75.0f, 55.0f);
+  TEST_ASSERT_FALSE(have);
+}
+
+void test_tset_echo_cap_lifts_when_boiler_accepts(void) {
+  bool have = true; float cap = 55.0f; uint8_t n = 0;
+  hcs::ot_tset_echo_learn(have, cap, n, 75.0f, 75.0f);
+  TEST_ASSERT_FALSE(have);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, cap);
+}
+
+void test_tset_echo_cap_rises_with_boiler_knob(void) {
+  bool have = true; float cap = 55.0f; uint8_t n = 0;
+  hcs::ot_tset_echo_learn(have, cap, n, 75.0f, 65.0f);
+  TEST_ASSERT_TRUE(have);
+  TEST_ASSERT_EQUAL_FLOAT(65.0f, cap);
+}
+
+void test_tset_echo_cap_ignores_grid_noise(void) {
+  bool have = false; float cap = 0; uint8_t n = 0;
+  hcs::ot_tset_echo_learn(have, cap, n, 75.0f, 74.8f);
+  hcs::ot_tset_echo_learn(have, cap, n, 75.0f, 74.7f);
+  hcs::ot_tset_echo_learn(have, cap, n, 75.0f, 74.6f);
+  TEST_ASSERT_FALSE(have);   // 0.3-0.4 °C echo deltas are rounding, not a cap
+}
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_ch_enable_on_variants);
@@ -867,5 +916,10 @@ int main(void) {
   RUN_TEST(test_otfifo_wraps_around);
   RUN_TEST(test_otfifo_reset_clears);
   RUN_TEST(test_otfifo_burst_keeps_all_Requests_on_slow_loop);
+  RUN_TEST(test_tset_echo_cap_latches_after_three);
+  RUN_TEST(test_tset_echo_cap_not_latched_by_single_echo);
+  RUN_TEST(test_tset_echo_cap_lifts_when_boiler_accepts);
+  RUN_TEST(test_tset_echo_cap_rises_with_boiler_knob);
+  RUN_TEST(test_tset_echo_cap_ignores_grid_noise);
   return UNITY_END();
 }
