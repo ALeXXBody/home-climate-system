@@ -45,6 +45,13 @@ class MqttBridge {
    *  blindness (a ~2 s reconnect gap per cycle). */
   static constexpr unsigned long MQTT_MAX_SESSION_MS = 6UL * 3600UL * 1000UL;
 
+  /** Portal-visible MQTT health (the hub reads this over HTTP). */
+  bool mqtt_connected() { return mqtt_.connected(); }
+  bool mqtt_outbound_ok() {
+    if (last_publish_ok_ms_ == 0) return true;
+    return millis() - last_publish_ok_ms_ < 5UL * 60UL * 1000UL;
+  }
+
   void loop();
   void setNodeId(const String& id) {
     node_id_ = id;
@@ -57,7 +64,7 @@ class MqttBridge {
   void setDeviceInfo(const String& name, const String& ip);
   const String& nodeId() const { return node_id_; }
 
-  void publishTelemetry(const OtSnapshot& s);
+  bool publishTelemetry(const OtSnapshot& s);
   /** Retained control-state mirror (hcs/<node>/ctl), change-gated. */
   void publishCtl();
   void publishDiscovery();
@@ -101,7 +108,7 @@ class MqttBridge {
   uint16_t port_ = 1883;
   bool host_ok_ = false;
   unsigned long session_started_ms_ = 0;   // when the current MQTT session began
-
+  unsigned long last_publish_ok_ms_ = 0;   // last publish the client accepted
   unsigned long last_reconnect_ms_ = 0;
   unsigned long last_telemetry_ms_ = 0;
   unsigned long last_discovery_ms_ = 0;

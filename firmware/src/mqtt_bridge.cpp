@@ -90,7 +90,9 @@ void MqttBridge::loop() {
   unsigned long now = millis();
   if (mqtt_.connected() && now - last_telemetry_ms_ >= TELEMETRY_INTERVAL_MS) {
     last_telemetry_ms_ = now;
-    publishTelemetry(ot_.snap());
+    if (publishTelemetry(ot_.snap())) {
+      last_publish_ok_ms_ = now;
+    }
   }
   if (mqtt_.connected() && now - last_discovery_ms_ >= DISCOVERY_INTERVAL_MS) {
     last_discovery_ms_ = now;
@@ -340,7 +342,7 @@ void MqttBridge::publishDiscovery() {
   publish(hcsTopic(node_id_, "version"), HCS_FW_VERSION, true);
 }
 
-void MqttBridge::publishTelemetry(const OtSnapshot& s) {
+bool MqttBridge::publishTelemetry(const OtSnapshot& s) {
   // Always heartbeat — HCC uses any leaf under hcs/<node>/ as liveness.
   // Gating temps on s.valid used to go silent whenever OT blipped, which
   // made the HA pill flip to "Boiler disconnected" even though the board
@@ -495,4 +497,5 @@ void MqttBridge::publishTelemetry(const OtSnapshot& s) {
       }
     }
   }
+  return true;
 }

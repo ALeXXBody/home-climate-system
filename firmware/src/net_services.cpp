@@ -787,6 +787,13 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     doc["ip"] = WiFi.localIP().toString();
     doc["name"] = liveCfg().device_name;
     doc["mqtt_host"] = liveCfg().mqtt_host;
+    if (MqttBridge* mb = MqttBridge::active()) {
+      doc["mqtt_connected"] = mb->mqtt_connected();
+      doc["mqtt_outbound_ok"] = mb->mqtt_outbound_ok();
+    } else {
+      doc["mqtt_connected"] = false;
+      doc["mqtt_outbound_ok"] = false;
+    }
     doc["mqtt_port"] = liveCfg().mqtt_port;
     doc["rssi"] = WiFi.RSSI();
     doc["uptime"] = millis() / 1000UL;
