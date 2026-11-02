@@ -43,6 +43,7 @@ void MqttBridge::begin(const char* host, uint16_t port, const char* user,
     return;
   }
   host_ok_ = true;
+  session_started_ms_ = millis();
   mqtt_.setServer(host_.c_str(), port_);
   mqtt_.setCallback(thunk);
   mqtt_.setBufferSize(1024);
@@ -71,15 +72,16 @@ void MqttBridge::loop() {
   } else {
     mqtt_.loop();
     // Session-lifetime rebinding: a quiet socket can outlive the session it
-    // sits on (route died, broker restarted, NAT re-bound). If the broker
-    // has not ACKed anything inbound for MQTT_ACK_TIMEOUT_MS, the session is
-    // a zombie — disconnect and let the reconnect path rebuild it. Tracking
-    // *inbound* is the point: PubSubClient writes happily into a dead peer,
-    // so outbound alone proves nothing (exactly how the hub went blind for
-    // 7 days in 2026-10).
-    if (millis() - last_in_ms_ > MQTT_ACK_TIMEOUT_MS) {
-      Serial.printf("[mqtt] no inbound for %lu ms — forcing session rebind\n",
-                    MQTT_ACK_TIMEOUT_MS);
+    // sits on (route died, broker restarted, NAT re-bound). Quiet nights are
+    // LEGITIMATE (no commands for hours) — so no inbound-decay trigger; the
+    // unconditional max-age rebind bounds a zombie's lifetime instead: the
+    // session is torn down and rebuilt on a fixed clock (a ~2 s gap, and
+    // LWT+retain keep the hub's picture correct through it). October 2026:
+    // the hub stayed blind for 7 days under exactly this wedge.
+    if (millis() - session_started_ms_ > MQTT_MAX_SESSION_MS) {
+      Serial.printf("[mqtt] session age > %lu ms — rebinding\n",
+                    MQTT_MAX_SESSION_MS);
+      session_started_ms_ = millis();
       mqtt_.disconnect();
       reconnect();
     }
@@ -122,6 +124,7 @@ void MqttBridge::reconnect() {
   }
   Serial.println("[mqtt] connected");
   delay_ms = MQTT_RECONNECT_MS;
+  session_started_ms_ = millis();   // the rebind clock resets with the session
   publish(lwt, "online", true);
   subscribeAll();
   publishDiscovery();
@@ -151,7 +154,6 @@ void MqttBridge::subscribeAll() {
 }
 
 void MqttBridge::onMessage(char* topic, byte* payload, unsigned int length) {
-  last_in_ms_ = millis();   // inbound ACK: proof the session is really alive
   String t(topic);
   String p;
   p.reserve(length + 1);

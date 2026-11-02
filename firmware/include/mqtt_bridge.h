@@ -39,10 +39,11 @@ class MqttBridge {
   MqttBridge(Client& net, OtMaster& ot);
 
   void begin(const char* host, uint16_t port, const char* user, const char* pass);
-  /** The hub went blind for 7 days when PubSubClient trusted a zombie
-   *  TCP session. Decay that class: surface the configured ACK timeout for
-   *  the session guard in the bridge loop. */
-  static constexpr unsigned long MQTT_ACK_TIMEOUT_MS = 90UL * 1000UL;
+  /** Zombie-session bound: the max age of ONE MQTT session. PubSubClient's
+   *  connected() peeks the socket and can stay true on a dead route
+   *  indefinitely; an unconditional rebind on this clock bounds the
+   *  blindness (a ~2 s reconnect gap per cycle). */
+  static constexpr unsigned long MQTT_MAX_SESSION_MS = 6UL * 3600UL * 1000UL;
 
   void loop();
   void setNodeId(const String& id) {
@@ -99,7 +100,7 @@ class MqttBridge {
   String host_;
   uint16_t port_ = 1883;
   bool host_ok_ = false;
-  unsigned long last_in_ms_ = 0;   // last inbound MQTT frame (any)
+  unsigned long session_started_ms_ = 0;   // when the current MQTT session began
 
   unsigned long last_reconnect_ms_ = 0;
   unsigned long last_telemetry_ms_ = 0;
