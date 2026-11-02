@@ -49,6 +49,12 @@ void MqttBridge::begin(const char* host, uint16_t port, const char* user,
   // Audit F7: default 15 s socket timeout stalled the whole loop during
   // every reconnect attempt against an unreachable broker.
   mqtt_.setSocketTimeout(4);
+  // Zombie-session guard: PubSubClient's connected() only peeks the TCP
+  // socket, which stays "alive" on a route that died under it (an IP or AP
+  // change mid-session does exactly that). Tighten the keepalive so the
+  // outbound PINGREQ cadence is honest, and rely on the loop-side max-age
+  // rebinding below to never trust a session older than MQTT_MAX_SESSION_MS.
+  mqtt_.setKeepAlive(30);
   Serial.printf("[mqtt] broker %s:%u user='%s'\n", host_.c_str(), port_,
                 user_.length() ? user_.c_str() : "(anonymous)");
 }
@@ -64,6 +70,19 @@ void MqttBridge::loop() {
     reconnect();
   } else {
     mqtt_.loop();
+    // Session-lifetime rebinding: a quiet socket can outlive the session it
+    // sits on (route died, broker restarted, NAT re-bound). If the broker
+    // has not ACKed anything inbound for MQTT_ACK_TIMEOUT_MS, the session is
+    // a zombie — disconnect and let the reconnect path rebuild it. Tracking
+    // *inbound* is the point: PubSubClient writes happily into a dead peer,
+    // so outbound alone proves nothing (exactly how the hub went blind for
+    // 7 days in 2026-10).
+    if (millis() - last_in_ms_ > MQTT_ACK_TIMEOUT_MS) {
+      Serial.printf("[mqtt] no inbound for %lu ms — forcing session rebind\n",
+                    MQTT_ACK_TIMEOUT_MS);
+      mqtt_.disconnect();
+      reconnect();
+    }
   }
 
   unsigned long now = millis();
@@ -132,6 +151,7 @@ void MqttBridge::subscribeAll() {
 }
 
 void MqttBridge::onMessage(char* topic, byte* payload, unsigned int length) {
+  last_in_ms_ = millis();   // inbound ACK: proof the session is really alive
   String t(topic);
   String p;
   p.reserve(length + 1);
