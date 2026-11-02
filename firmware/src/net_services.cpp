@@ -1650,6 +1650,76 @@ bool NetServices::applySettingsJson(const String& json) {
   return true;
 }
 
+void NetServices::checkForAutoUpdate() {
+#if HCS_AUTO_UPDATE
+  static unsigned long last_check_ms_ = 0;
+  static bool first_check_done_ = false;
+  unsigned long now = millis();
+  if (!first_check_done_) {
+    if (now < AUTO_CHECK_FIRST_DELAY_MS) return;   // boot grace
+    first_check_done_ = true;
+  } else if (now - last_check_ms_ < AUTO_CHECK_EVERY_MS) {
+    return;                                        // not due yet
+  }
+  last_check_ms_ = now;
+  // Never interrupt a burn or an update: the pull defers to the process.
+  if (ota_busy_ || reboot_pending_ || ot_.snap().flame) return;
+
+  String url = String("http://") + hub_host_ + ":" + AUTO_HUB_HTTP_PORT
+             + "/home_climate_control_static/firmware/latest.json";
+  HTTPClient cli;
+  cli.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  WiFiClient client;
+  cli.begin(client, url);
+  int code = cli.GET();
+  if (code != HTTP_CODE_OK) {
+    Serial.printf("[ota] auto-check: manifest fetch failed (HTTP %d)\n", code);
+    cli.end();
+    return;
+  }
+  String body = cli.getString();
+  cli.end();
+
+  JsonDocument d;
+  if (deserializeJson(d, body)) {
+    Serial.println("[ota] auto-check: manifest parse failed");
+    return;
+  }
+  const char* remote_ver = d[HCS_BOARD_NAME]["version"] | "";
+  const char* remote_url = d[HCS_BOARD_NAME]["url"] | "";
+  if (!remote_ver[0] || !remote_url[0]) {
+    Serial.println("[ota] auto-check: no entry for this board");
+    return;
+  }
+  // version compare: numeric tuple, newest wins
+  auto parts = [](const char* v, int out[3]) {
+    int i = 0; const char* p = v;
+    while (i < 3 && *p) {
+      long n = 0;
+      while (*p && *p != '.') n = n * 10 + (*p++ - '0');
+      out[i++] = (int)n;
+      if (*p == '.') p++;
+    }
+  };
+  int mine[3] = {0,0,0}, theirs[3] = {0,0,0};
+  parts(HCS_FW_VERSION, mine);
+  parts(remote_ver, theirs);
+  bool newer = theirs[0] > mine[0]
+            || (theirs[0] == mine[0] && theirs[1] > mine[1])
+            || (theirs[0] == mine[0] && theirs[1] == mine[1] && theirs[2] > mine[2]);
+  if (!newer) {
+    Serial.printf("[ota] auto-check: up to date (mine %s, hub %s)\n",
+                  HCS_FW_VERSION, remote_ver);
+    return;
+  }
+  Serial.printf("[ota] auto-check: hub offers %s (mine %s) — updating\n",
+                remote_ver, HCS_FW_VERSION);
+  startHttpUpdate(String(remote_url));   // the signed, verified flow
+#else
+  return;
+#endif
+}
+
 bool NetServices::startHttpUpdate(const String& url) {
   // Reentrancy guard: MQTT + HTTP fallback can both deliver the command.
   if (ota_busy_) return false;

@@ -45,6 +45,13 @@ class NetServices {
   /** ArduinoOTA (IDE / pio ota). */
   void beginArduinoOta(const HcsSettings& settings, const String& hostname);
 
+  /** Pull-based self-update: fetch the hub's static latest.json, compare
+   *  versions, and self-apply a newer signed release over plain LAN HTTP.
+   *  Safe to call from loop(): refuses while OTA busy / while burning. */
+  /** Hub host for the pull (the broker host belongs to the same HA box). */
+  void beginAutoUpdate(const String& hub_host) { hub_host_ = hub_host; }
+  void checkForAutoUpdate();
+
   void loop();
 
   /** Trigger HTTP OTA from a firmware URL (HA Firmware tab). */
@@ -135,6 +142,7 @@ class NetServices {
   const HcsSettings& liveCfg() const { return shared_ ? *shared_ : settings_; }
   bool reboot_pending_ = false;
   bool ota_busy_ = false;
+  String hub_host_;
   unsigned long ota_last_report_ms_ = 0;
   int ota_last_progress_ = -1;
   void otaRollLoad_();

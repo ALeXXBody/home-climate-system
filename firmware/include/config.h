@@ -2,7 +2,19 @@
 // Compile-time defaults. Runtime WiFi/MQTT come from captive portal (NVS).
 
 #ifndef HCS_FW_VERSION
-#define HCS_FW_VERSION "1.5.29"
+#define HCS_FW_VERSION "1.5.30"
+
+// ---- Pull-based self-update (v1.5.30) ------------------------------------
+// The board fetches the hub's own static update manifest over plain LAN
+// HTTP and self-applies a newer signed release. No MQTT delivery, no push,
+// no user click: a release lands and every board takes it within CHECK_EVERY.
+// The MQTT ota_url push stays as an instant-trigger fallback.
+#ifndef HCS_AUTO_UPDATE
+#define HCS_AUTO_UPDATE 1
+#endif
+#define AUTO_CHECK_FIRST_DELAY_MS (10UL * 60UL * 1000UL)   // 10 min after boot
+#define AUTO_CHECK_EVERY_MS (6UL * 3600UL * 1000UL)        // 6 h between checks
+#define AUTO_HUB_HTTP_PORT 8123                             // HA's static route
 #endif
 
 #ifndef HCS_BOARD_NAME

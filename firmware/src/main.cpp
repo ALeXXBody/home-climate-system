@@ -464,6 +464,7 @@ void setup() {
   net.beginHttp(settings, nodeId);
   net.beginArduinoOta(settings, nodeId);
   net.setOtaReporter(onOtaProgress);
+  net.beginAutoUpdate(settings.mqtt_host);   // pull-based self-update source
   net.setMqttConnectedFn([] { return mqtt.connected(); });
   net.setSharedSettings(&settings);
   net.setFailsafeStatePtr(&fs_state);
@@ -587,6 +588,7 @@ void loop() {
 #ifndef HCS_TEST_BOOT
   HCS_MARK("net.loop");
   net.loop();
+  net.checkForAutoUpdate();   // self-apply newer signed releases (6 h cadence, burn-safe)
   HCS_MARK("wc.sync");
   syncWcFromDevice();
 
