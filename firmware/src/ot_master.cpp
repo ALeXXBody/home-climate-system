@@ -540,8 +540,10 @@ void OtMaster::doPoll_() {
         last_return_ot_ms_ = now;
       } else if (snap_.return_from_ot &&
                  now - last_return_ot_ms_ > 60000UL) {
+        // Drop the "this came from OT" flag so 1-Wire may take over.
+        // Do not erase the number: a missed read used to publish nothing,
+        // and the hub card went to a dash until the next success.
         snap_.return_from_ot = false;
-        snap_.return_temp = NAN;
       }
       break;
     }
@@ -556,7 +558,6 @@ void OtMaster::doPoll_() {
       } else if (snap_.outdoor_from_ot &&
                  now - last_outdoor_ot_ms_ > 60000UL) {
         snap_.outdoor_from_ot = false;
-        snap_.outdoor_temp = NAN;
       }
       break;
     }
