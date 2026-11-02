@@ -83,6 +83,14 @@ class OtMaster {
   bool failsafeHeat() const { return failsafe_; }
 
   void referencePoll();
+  /** A head-end command (MQTT or the portal) arrived. Failsafe release
+   *  must not overwrite it with the pre-outage snapshot. */
+  void noteHeadEndCommand() { headend_cmd_ = true; }
+  bool consumeHeadEndCommand() {
+    bool v = headend_cmd_;
+    headend_cmd_ = false;
+    return v;
+  }
 
   bool chEnable() const { return ch_enable_; }
   bool dhwEnable() const { return dhw_enable_; }
@@ -173,7 +181,8 @@ class OtMaster {
   void doPoll_();
   void writeTSet_();
   void readFloat_(OpenThermMessageID id, float& dest, float lo, float hi,
-                  bool* from_ot_flag);
+                  bool* from_ot_flag, bool allow_zero = false);
+  bool headend_cmd_ = false;
 
 #ifdef HCS_GW_ENABLE
   bool autopoll_ = true;

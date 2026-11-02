@@ -1017,6 +1017,12 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
       server.send(400, "application/json", "{\"ok\":false,\"error\":\"bad json\"}");
       return;
     }
+    if (login_lockout_until_ &&
+        (long)(millis() - login_lockout_until_) < 0) {
+      server.send(429, "application/json",
+                  "{\"ok\":false,\"error\":\"locked out\"}");
+      return;
+    }
     String pw = d["password"] | "";
     if (pw.length() == 0 || pw != cfg.ota_password) {
       login_failures_++;
@@ -1060,12 +1066,12 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     }
 
     const bool has_enabled = d["enabled"].is<bool>();
-    const bool disabling = has_enabled && !d["enabled"].as<bool>();
 
-    // Turning auth OFF must never require authentication — otherwise the
-    // user can be locked out of disabling it (the "still asks for password"
-    // bug). Enabling auth or changing the password needs current credentials.
-    if (!disabling && cfg.auth_enabled && cfg.ota_password.length() && !authOk()) {
+    // Disabling auth is a control-plane change. When a password is set it
+    // requires that password — an unauthenticated LAN client must not be
+    // able to turn the lock off and then command the boiler. No password
+    // set means there is nothing to protect.
+    if (cfg.auth_enabled && cfg.ota_password.length() && !authOk()) {
       return;
     }
 
@@ -1102,7 +1108,10 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
                   "{\"ok\":false,\"error\":\"bad json\"}");
       return;
     }
-    if (!d["ch_enable"].isNull()) ot_.setChEnable(d["ch_enable"].as<bool>());
+    if (!d["ch_enable"].isNull()) {
+      ot_.noteHeadEndCommand();
+      ot_.setChEnable(d["ch_enable"].as<bool>());
+    }
 #if defined(ESP32)
     if (!d["txpower"].isNull()) {
       const float want = d["txpower"].as<float>();
@@ -1133,8 +1142,10 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
       }
     }
     if (!d["dhw_enable"].isNull()) ot_.setDhwEnable(d["dhw_enable"].as<bool>());
-    if (!d["flow_setpoint"].isNull())
+    if (!d["flow_setpoint"].isNull()) {
+      ot_.noteHeadEndCommand();
       ot_.setFlowSetpoint(constrain(d["flow_setpoint"].as<float>(), 20.0f, 90.0f));
+    }
     if (!d["dhw_setpoint"].isNull()) {
       // "auto" / "off" → thermostat controls DHW (NaN); numeric °C otherwise
       if (d["dhw_setpoint"].is<const char*>()) {
@@ -1471,12 +1482,10 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
 
   // Audit F14: collect Origin so mutating handlers can reject cross-site
   // form posts (drive-by CSRF) even when no password is configured.
-#ifdef ESP8266
-  server.collectHeaders(String("Origin"));
-#else
-  static const char* kCorsHeaders[] = {"Origin"};
-  server.collectHeaders(kCorsHeaders, 1);
-#endif
+  // Cookie must be collected or the session set by /api/login is invisible
+  // to authOk() and every later control call 401s.
+  static const char* kCorsHeaders[] = {"Origin", "Cookie"};
+  server.collectHeaders(kCorsHeaders, 2);
 
   server.begin();
   http_started_ = true;
@@ -1487,9 +1496,13 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
 void NetServices::beginArduinoOta(const HcsSettings& settings,
                                   const String& hostname) {
   ArduinoOTA.setHostname(hostname.c_str());
-  if (settings.ota_password.length()) {
-    ArduinoOTA.setPassword(settings.ota_password.c_str());
+  // No password means an open unsigned network flash. HTTP OTA stays
+  // available and still checks the signature. ArduinoOTA does not.
+  if (!settings.ota_password.length()) {
+    Serial.println(F("[ota] ArduinoOTA disabled — no admin password set"));
+    return;
   }
+  ArduinoOTA.setPassword(settings.ota_password.c_str());
   ArduinoOTA.onStart([]() { Serial.println(F("[ota] ArduinoOTA start")); });
   ArduinoOTA.onEnd([]() { Serial.println(F("[ota] ArduinoOTA end")); });
   ArduinoOTA.onError([](ota_error_t e) {

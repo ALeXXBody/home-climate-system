@@ -48,7 +48,9 @@ class MqttBridge {
   /** Portal-visible MQTT health (the hub reads this over HTTP). */
   bool mqtt_connected() { return mqtt_.connected(); }
   bool mqtt_outbound_ok() {
-    if (last_publish_ok_ms_ == 0) return true;
+    // Never published successfully is not "ok". The old true default hid
+    // a session whose writes were all rejected.
+    if (last_publish_ok_ms_ == 0) return false;
     return millis() - last_publish_ok_ms_ < 5UL * 60UL * 1000UL;
   }
 
@@ -140,7 +142,7 @@ class MqttBridge {
   uint16_t port() const { return port_; }
 
   void handleCommand(const String& topic, const String& payload);
-  void publish(const String& topic, const String& payload, bool retain = false);
+  bool publish(const String& topic, const String& payload, bool retain = false);
   /** Publish an empty retained message to *topic* to clear the broker's
    *  retained copy (stops a one-shot command re-firing on reconnect). */
   void clearRetained(const String& topic);

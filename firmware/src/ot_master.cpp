@@ -257,7 +257,7 @@ void OtMaster::writeTSet_() {
 }
 
 void OtMaster::readFloat_(OpenThermMessageID id, float& dest, float lo,
-                          float hi, bool* from_ot_flag) {
+                          float hi, bool* from_ot_flag, bool allow_zero) {
   unsigned long resp = xchg_(OpenTherm::buildRequest(
       OpenThermMessageType::READ_DATA, id, 0));
   if (!xchgOk_() || OpenTherm::getDataID(resp) != id) {
@@ -273,8 +273,9 @@ void OtMaster::readFloat_(OpenThermMessageID id, float& dest, float lo,
     if (from_ot_flag) *from_ot_flag = false;
     return;
   }
-  // Reject pure zero payload (library/default empty frame).
-  if (t == 0.0f && (resp & 0xFFFF) == 0) {
+  // A READ_ACK of exactly 0 is a real 0% modulation. Other IDs still
+  // reject that payload: it is also what an empty frame looks like.
+  if (!allow_zero && t == 0.0f && (resp & 0xFFFF) == 0) {
     if (from_ot_flag) *from_ot_flag = false;
     return;
   }
@@ -387,6 +388,10 @@ void OtMaster::slowRead_() {
   unsigned long resp = xchg_(
       OpenTherm::buildRequest(OpenThermMessageType::READ_DATA, id, 0));
   if (!xchgOk_() || OpenTherm::getDataID(resp) != id) return;
+  // DATA_INVALID / UNKNOWN-DATA-ID echo the id with data 0. Treating that
+  // as a successful read latched MaxTSet bounds of 0 and clamped every CH
+  // write to 1 °C.
+  if (OpenTherm::getMessageType(resp) != OpenThermMessageType::READ_ACK) return;
   uint16_t d = OpenTherm::getUInt(resp);
   switch ((uint16_t)id) {
     case 18:
@@ -408,17 +413,26 @@ void OtMaster::slowRead_() {
       snap_.min_mod_pct = d & 0xFF;
       snap_.valid_capacity = true;
       break;
-    case 48:
-      snap_.dhw_ub = (int8_t)((d >> 8) & 0xFF);
-      snap_.dhw_lb = (int8_t)(d & 0xFF);
+    case 48: {
+      uint8_t ub = (d >> 8) & 0xFF;
+      uint8_t lb = d & 0xFF;
+      if (ub < 20 || ub > 90 || lb > ub) break;
+      snap_.dhw_ub = (int8_t)ub;
+      snap_.dhw_lb = (int8_t)lb;
       snap_.valid_dhw_bounds = true;
       break;
-    case 49:
-      snap_.maxtset_ub = (int8_t)((d >> 8) & 0xFF);
-      snap_.maxtset_lb = (int8_t)(d & 0xFF);
+    }
+    case 49: {
+      uint8_t ub = (d >> 8) & 0xFF;
+      uint8_t lb = d & 0xFF;
+      // int8_t of a high byte >= 128 is negative and collapses the clamp.
+      if (ub < 20 || ub > 90 || lb > ub) break;
+      snap_.maxtset_ub = (int8_t)ub;
+      snap_.maxtset_lb = (int8_t)lb;
       snap_.valid_maxtset_bounds = true;
       break;
-    case 12:
+    }
+    case 13:
       snap_.fhb_size = d & 0xFF;
       snap_.valid_fhb = true;
       if (!fhb_fetched_once_ ||
@@ -548,7 +562,8 @@ void OtMaster::doPoll_() {
     }
     case 2: {  // modulation
       float t = NAN;
-      readFloat_(OpenThermMessageID::RelModLevel, t, 0.0f, 100.0f, nullptr);
+      readFloat_(OpenThermMessageID::RelModLevel, t, 0.0f, 100.0f, nullptr,
+                 true);
       if (!isnan(t)) snap_.modulation = t;
       break;
     }

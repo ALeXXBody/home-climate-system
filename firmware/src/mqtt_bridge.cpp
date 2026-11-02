@@ -173,12 +173,14 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
   HcsCommandResult r = hcs_parse_command(topic.c_str(), payload.c_str());
   switch (r.cmd) {
     case HCS_CMD_CH_ENABLE:
+      ot_.noteHeadEndCommand();
       ot_.setChEnable(r.bool_value);
       break;
     case HCS_CMD_DHW_ENABLE:
       ot_.setDhwEnable(r.bool_value);
       break;
     case HCS_CMD_FLOW_SETPOINT:
+      ot_.noteHeadEndCommand();
       ot_.setFlowSetpoint(r.float_value);
       break;
     case HCS_CMD_DHW_SETPOINT:
@@ -245,8 +247,13 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
   }
 }
 
-void MqttBridge::publish(const String& topic, const String& payload, bool retain) {
-  mqtt_.publish(topic.c_str(), payload.c_str(), retain);
+bool MqttBridge::publish(const String& topic, const String& payload, bool retain) {
+  if (!mqtt_.connected()) return false;
+  if (mqtt_.publish(topic.c_str(), payload.c_str(), retain)) return true;
+  // A full 1024-byte buffer returns false and drops the leaf. One loop()
+  // drains it; retry once so flow/return are not the ones that vanish.
+  mqtt_.loop();
+  return mqtt_.publish(topic.c_str(), payload.c_str(), retain);
 }
 
 void MqttBridge::clearRetained(const String& topic) {
@@ -347,6 +354,10 @@ bool MqttBridge::publishTelemetry(const OtSnapshot& s) {
   // Gating temps on s.valid used to go silent whenever OT blipped, which
   // made the HA pill flip to "Boiler disconnected" even though the board
   // was up (and 1-Wire outdoor/return were still valid).
+  // Critical leaves (flow/return/modulation) must actually be accepted by
+  // the client. A failed write used to return true anyway, so
+  // mqtt_outbound_ok stayed green while those topics never left the board.
+  bool critical_ok = true;
   publish(hcsTopic(node_id_, "online"), "online", true);
   publish(hcsTopic(node_id_, "ot_valid"), s.valid ? "ON" : "OFF");
   publishCtl();
@@ -354,14 +365,17 @@ bool MqttBridge::publishTelemetry(const OtSnapshot& s) {
   publish(hcsTopic(node_id_, "flame"), s.flame ? "ON" : "OFF");
   publish(hcsTopic(node_id_, "ch_active"), s.ch_active ? "ON" : "OFF");
   publish(hcsTopic(node_id_, "fault"), s.fault ? "ON" : "OFF");
-  if (!isnan(s.flow_temp))
-    publish(hcsTopic(node_id_, "flow_temp"), f2(s.flow_temp));
-  if (!isnan(s.return_temp))
-    publish(hcsTopic(node_id_, "return_temp"), f2(s.return_temp));
+  if (!isnan(s.flow_temp) &&
+      !publish(hcsTopic(node_id_, "flow_temp"), f2(s.flow_temp)))
+    critical_ok = false;
+  if (!isnan(s.return_temp) &&
+      !publish(hcsTopic(node_id_, "return_temp"), f2(s.return_temp)))
+    critical_ok = false;
   if (!isnan(s.outdoor_temp))
     publish(hcsTopic(node_id_, "outdoor_temp"), f2(s.outdoor_temp));
-  if (!isnan(s.modulation))
-    publish(hcsTopic(node_id_, "modulation"), f2(s.modulation));
+  if (!isnan(s.modulation) &&
+      !publish(hcsTopic(node_id_, "modulation"), f2(s.modulation)))
+    critical_ok = false;
 
   // Boiler CH ceiling learned from TSet W-ACK echoes; "off" while unknown.
   // Every telemetry tick (not change-gated) so the hub sees the cap lift
@@ -497,5 +511,5 @@ bool MqttBridge::publishTelemetry(const OtSnapshot& s) {
       }
     }
   }
-  return true;
+  return critical_ok;
 }

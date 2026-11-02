@@ -66,8 +66,13 @@ static void applyFailsafe(bool active) {
                   settings.fs_flow_c);
   } else {
     ot.setFailsafeHeat(false);
-    if (ot.chEnable() && !fs_prev_ch) ot.setChEnable(fs_prev_ch);
-    if (!isnan(fs_prev_flow)) ot.setFlowSetpoint(fs_prev_flow);
+    // A command that arrived while the link was down is the head-end's
+    // current wish. Restoring the pre-failsafe snapshot used to throw it
+    // away. If nothing arrived, put the previous demand back.
+    if (!ot.consumeHeadEndCommand()) {
+      if (ot.chEnable() && !fs_prev_ch) ot.setChEnable(fs_prev_ch);
+      if (!isnan(fs_prev_flow)) ot.setFlowSetpoint(fs_prev_flow);
+    }
     Serial.println("[fs] failsafe released - head-end back in control");
   }
 }
@@ -641,9 +646,11 @@ void loop() {
     static unsigned long last_ref_ms = 0;
     if (!gw.thermostatOnline(10000) && millis() - last_ref_ms > 60000) {
       last_ref_ms = millis();
-      ot.referencePoll();
+      // Do not referencePoll() here. A Status read carries the master's
+      // CH bit, and ch_enable_ is false after boot, so this used to inject
+      // CH-off onto the boiler whenever the wall stat paused.
       ot.applySensorInject();
-      mqtt.publishTelemetry(ot.snap());  // refresh retained topics
+      mqtt.publishTelemetry(ot.snap());
     }
   } else {
     ot.poll();  // autonomous ~1 Hz master cycle (injects sensors inside poll)

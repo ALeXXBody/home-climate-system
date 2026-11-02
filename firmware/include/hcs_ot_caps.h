@@ -92,11 +92,27 @@ inline void ot_tset_echo_learn(bool& have_cap, float& cap, uint8_t& confirm,
     return;
   }
   if (echoed >= want - tol) {
-    have_cap = false;  // the boiler accepted the full request again
-    cap = 0.0f;
-    confirm = 0;
+    // Only a request ABOVE the latched cap, accepted in full, proves the
+    // ceiling is gone. A command that was already at or below the cap
+    // (the curve asking for 55 on a 55 °C boiler) must not clear it.
+    if (want > cap + tol) {
+      have_cap = false;
+      cap = 0.0f;
+      confirm = 0;
+    } else {
+      confirm = 0;
+    }
     return;
   }
+  if (echoed + tol < cap) {
+    // Knob turned down: three lower echoes move the cap down with it.
+    if (++confirm >= 3) {
+      cap = echoed;
+      confirm = 0;
+    }
+    return;
+  }
+  confirm = 0;
   if (echoed > cap + tol) cap = echoed;  // boiler raised its own ceiling
 }
 

@@ -833,6 +833,25 @@ void test_tset_echo_cap_rises_with_boiler_knob(void) {
   TEST_ASSERT_EQUAL_FLOAT(65.0f, cap);
 }
 
+void test_tset_echo_cap_does_not_clear_when_request_is_at_cap(void) {
+  // Commanding the already-learned ceiling must not forget it.
+  bool have = true; float cap = 55.0f; uint8_t n = 0;
+  hcs::ot_tset_echo_learn(have, cap, n, 55.0f, 55.0f);
+  TEST_ASSERT_TRUE(have);
+  TEST_ASSERT_EQUAL_FLOAT(55.0f, cap);
+}
+
+void test_tset_echo_cap_lowers_after_three_lower_echoes(void) {
+  bool have = true; float cap = 55.0f; uint8_t n = 0;
+  hcs::ot_tset_echo_learn(have, cap, n, 75.0f, 45.0f);
+  TEST_ASSERT_EQUAL_FLOAT(55.0f, cap);
+  hcs::ot_tset_echo_learn(have, cap, n, 75.0f, 45.0f);
+  TEST_ASSERT_EQUAL_FLOAT(55.0f, cap);
+  hcs::ot_tset_echo_learn(have, cap, n, 75.0f, 45.0f);
+  TEST_ASSERT_TRUE(have);
+  TEST_ASSERT_EQUAL_FLOAT(45.0f, cap);
+}
+
 void test_tset_echo_cap_ignores_grid_noise(void) {
   bool have = false; float cap = 0; uint8_t n = 0;
   hcs::ot_tset_echo_learn(have, cap, n, 75.0f, 74.8f);
@@ -920,6 +939,8 @@ int main(void) {
   RUN_TEST(test_tset_echo_cap_not_latched_by_single_echo);
   RUN_TEST(test_tset_echo_cap_lifts_when_boiler_accepts);
   RUN_TEST(test_tset_echo_cap_rises_with_boiler_knob);
+  RUN_TEST(test_tset_echo_cap_does_not_clear_when_request_is_at_cap);
+  RUN_TEST(test_tset_echo_cap_lowers_after_three_lower_echoes);
   RUN_TEST(test_tset_echo_cap_ignores_grid_noise);
   return UNITY_END();
 }
