@@ -1484,8 +1484,14 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
   // form posts (drive-by CSRF) even when no password is configured.
   // Cookie must be collected or the session set by /api/login is invisible
   // to authOk() and every later control call 401s.
+  // ESP8266's collectHeaders takes String[], not const char*[].
+#ifdef ESP8266
+  const String kCorsHeaders[] = {String("Origin"), String("Cookie")};
+  server.collectHeaders(kCorsHeaders, 2);
+#else
   static const char* kCorsHeaders[] = {"Origin", "Cookie"};
   server.collectHeaders(kCorsHeaders, 2);
+#endif
 
   server.begin();
   http_started_ = true;
