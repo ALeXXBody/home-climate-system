@@ -1,5 +1,49 @@
 # Changelog
 
+## v1.5.x
+
+The 1.5 line (2026-10 → 2026-11) hardened the board rather than adding user
+features: web-UI authentication, signed firmware verification on every board
+including ESP8266, an honest image-size budget, a learned CH ceiling, an MQTT
+session that cannot silently die, and pull-based self-update that does not
+depend on MQTT at all.
+
+| Version | Change |
+|---|---|
+| [v1.5.32](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.32) | A missed outdoor or return read keeps the last temperature instead of publishing nothing |
+| [v1.5.31](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.31) | ESP8266 collects Origin and Cookie through the variadic header API; the array form is ESP32-only |
+| [v1.5.30](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.30) | Pull-based self-update: the board fetches the hub's `latest.json` over plain LAN HTTP and applies a newer signed release itself (6 h cadence, deferred during a burn or OTA); MQTT `ota_url` stays the instant fallback |
+| [v1.5.29](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.29) | `/api/status` exposes `mqtt_connected` and `mqtt_outbound_ok`, so a one-way MQTT death is readable over HTTP |
+| [v1.5.28](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.28) | Session rebinding by maximum age (6 h) instead of the 90 s inbound-decay trigger, which would have reconnect-looped on quiet nights |
+| [v1.5.27](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.27) | Zombie-session guard: keepalive 30 s, rebind when no inbound frame lands for 90 s |
+| [v1.5.26](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.26) | The learned CH ceiling also travels in the retained `ctl` mirror as `tset_cap` |
+| [v1.5.25](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.25) | Learned boiler CH ceiling: three persistent TSet write-ACK echoes latch a real ceiling; writes clamp to it, with a ~5 min unclamped probe so a re-configured boiler lifts it |
+| [v1.5.24](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.24) | OTA size budget made honest: unused exceptions/RTTI dropped (~80 KB), a per-env CI image budget, and a readable `Update.begin` failure |
+| [v1.5.23](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.23) | Pinned toolchain, ESP8266 joins the signed-OTA chain, the OT slave latch becomes a tested ring, DHW setpoint clamped at the command boundary |
+| [v1.5.22](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.22) | Deinit and re-init the watchdog (reconfigure exists only in newer IDF minors) |
+| [v1.5.20](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.20) | Publish `boiler_diag` and `failsafe` every tick instead of change-gated |
+| [v1.5.19](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.19) | Disabling authentication no longer requires a login |
+| [v1.5.18](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.18) | OTA rollback watchdog: an OT link counts as healthy, plus a health latch |
+| [v1.5.17](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.17) | Signed OTA: ECDSA P-256 image verification with streamed download |
+| [v1.5.16](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.16) | Escape `device_name` in discovery, subscribe `set`/`led`, sanitise the node id |
+| [v1.5.15](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.15) | In-page login form with a session cookie and logout |
+| [v1.5.14](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.14) | Web auth flow: create password → login, with an enable/disable toggle |
+| [v1.5.13](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.13) | Secure by default: a MAC-derived admin password plus recovery AP and update auth |
+| [v1.5.12](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.12) | Security: exact-origin CSRF guard, OTA URL validation, `/api/ota` origin check |
+| [v1.5.11](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.11) | Gateway link self-heal, retained-command dedupe, OT parity validation, portal field fix |
+| [v1.5.10](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.10) | 1-Wire pins belong to their board environments; `/api/status` and OTA auth use live settings |
+| [v1.5.9](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.9) | Plain-LED blink family with active-low restore, portal secrets masked and never echoed, open setup/recovery AP |
+| [v1.5.8](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.8) | C3 Mini TX 8.5 dBm, no disconnect/begin thrash, HT20 and `PS_NONE` after association |
+| [v1.5.5](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.5) | Status LED toggle and brightness on the Settings page (web and MQTT), persisted |
+| [v1.5.4](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.4) | Active Wi-Fi re-association, TX power and driver properties |
+| [v1.5.2](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.2) | Gateway slave ISR is all-IRAM, matching the master path |
+| [v1.5.1](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.1) | Wi-Fi event logging, to diagnose silent drops |
+| [v1.5.0](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.0) | Audited stable release |
+
+Versions `v1.5.3`, `v1.5.6`, `v1.5.7` and `v1.5.21` were never tagged.
+`v1.5.3` exists as a GitHub release with no matching tag; the others were
+superseded inside the same day.
+
 ## v1.4.8
 
 **Release:** [GitHub](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.4.8)

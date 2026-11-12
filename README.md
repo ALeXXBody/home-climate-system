@@ -9,7 +9,8 @@
 **Hardware + firmware** for [Home Climate Control](https://github.com/ALeXXBody/home-climate-control).
 
 **Docs wiki:** [Home · Hardware · Flash · MQTT · Failsafe · Boards](docs/wiki/Home.md)  
-*(GitHub Wiki flag is on; seed pages from `docs/wiki/` via repo → Wiki if you want the `/wiki` URL.)*
+*(Lives in `docs/wiki/` in this repo. The GitHub wiki flag is enabled but not
+populated, so `/wiki` redirects back here — read the pages from the repo.)*
 
 | Product | Repo | Role |
 |---|---|---|
@@ -18,7 +19,7 @@
 
 | | |
 |---|---|
-| **Current firmware** | **v1.5.0** |
+| **Current firmware** | **v1.5.32** |
 | **License** | MIT |
 
 ## Supported hardware
@@ -29,7 +30,7 @@
 
 See [docs/hardware.md](docs/hardware.md) and the [Wiki — Hardware](https://github.com/ALeXXBody/home-climate-system/wiki/Hardware).
 
-## Firmware (v1.5.0)
+## Firmware (v1.5.32)
 
 PlatformIO project under `firmware/`.
 
@@ -59,7 +60,7 @@ PlatformIO project under `firmware/`.
 `d1_mini`, `lolin_s2_mini`, `lolin_c3_mini`, `esp32_d1_mini`, `esp32s3_zero`  
 (+ `lolin_s2_mini_gw`, `esp32_d1_mini_gw`, `lolin_c3_mini_gw`)
 
-Release assets: [v1.5.0](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.0)  
+Release assets: [v1.5.32](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.32)  
 (`firmware-<env>.bin` for each board)
 
 ## Quick start
@@ -71,7 +72,7 @@ pio device monitor -b 115200
 # Join AP HCS-Setup-XXXX → set WiFi + MQTT broker
 ```
 
-Prefer OTA from **Home Climate Control → Devices** after the catalog shows 1.4.0.
+Prefer OTA from **Home Climate Control → Device** once the board runs 1.4.0 or newer.
 
 Full steps: [docs/flash.md](docs/flash.md) · [Wiki — Flash](docs/wiki/Flash-and-first-boot.md)
 
@@ -96,11 +97,12 @@ Full contract: [protocol/mqtt.md](protocol/mqtt.md) · [Wiki — MQTT](docs/wiki
   to `hcs/<node>/set/#` can drive the board. Restrict that topic (and
   `hcs/<node>/set/settings`, `…/ota_url`, `…/reboot`) with broker ACLs so only the
   Home Climate Control integration can write commands.
-- **OTA image verification (ESP32)**: firmware images are ECDSA-signed. The board
+- **OTA image verification**: firmware images are ECDSA-signed. The board
   streams the image to the OTA slot, hashes it, and verifies the signature against
   a baked-in public key before booting — a tampered or MITM'd image is rejected.
   Release images are signed with `scripts/sign_firmware.py`; a `.sig` must sit
-  alongside each `.bin` on the mirror. (ESP8266 keeps the legacy unsigned path.)
+  alongside each `.bin` on the mirror. ESP8266 verifies with BearSSL before
+  committing the image, so no board family is left on an unsigned path.
 
 ## Docs
 
@@ -108,7 +110,7 @@ Full contract: [protocol/mqtt.md](protocol/mqtt.md) · [Wiki — MQTT](docs/wiki
 - [Hardware detail](docs/hardware.md) · [Flash detail](docs/flash.md) · [Architecture](docs/architecture.md)  
 - [Failsafe detail](docs/failsafe.md) · [Gateway design](docs/design-gateway.md)  
 - [MQTT protocol](protocol/mqtt.md) · [OTGW license notes](docs/license-otgw.md)  
-- HA software: [home-climate-control](https://github.com/ALeXXBody/home-climate-control) · [HCC docs wiki](https://github.com/ALeXXBody/home-climate-control/blob/main/docs/wiki/Home.md)
+- HA software: [home-climate-control](https://github.com/ALeXXBody/home-climate-control) · [HCC wiki](https://github.com/ALeXXBody/home-climate-control/wiki)
 
 ## Support
 
