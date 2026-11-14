@@ -718,12 +718,10 @@ void test_ot_registry_sweep_order_and_coverage(void) {
         id == 11 || id == 12)
       TEST_ASSERT(kHcsOtIds[i].sweep != HCS_OT_SWEEP);
   }
-  // Every swept ID has a name.
-  for (size_t i = 0; i < kHcsOtIdCount; i++) {
-    if (kHcsOtIds[i].sweep != HCS_OT_SWEEP) continue;
-    TEST_ASSERT_NOT_NULL(kHcsOtIds[i].name);
-    TEST_ASSERT_GREATER_THAN(0, strlen(kHcsOtIds[i].name));
-  }
+  // Display names intentionally live outside this table (hub panel OT_NAMES
+  // + firmware ot_log decoder): 52 name strings cost ~680 B of flash the
+  // esp32_d1_mini_gw OTA slot does not have. Sweep membership + decode
+  // type are asserted structurally below instead.
 }
 
 void test_ot_registry_decode_skips_writes(void) {
