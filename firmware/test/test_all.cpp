@@ -8,6 +8,7 @@
 #include "hcs_sensor_logic.h"
 #include "hcs_boiler_text.h"
 #include "hcs_ot_caps.h"
+#include "hcs_ot_ids.h"
 #include "hcs_failsafe.h"
 #include "hcs_wifi_heal.h"
 
@@ -667,16 +668,76 @@ void test_ot_clamp_bounds(void) {
 }
 
 void test_ot_slow_read_round_robin(void) {
-  // first seven cycles cover pressure, cfgs, capacity, bounds, fhb
+  // Legacy ring helper (the wire path now sweeps the hcs_ot_ids.h
+  // registry; the ring stays as the documented minimal set): pressure,
+  // cfgs, capacity, bounds, MaxTSet value, fhb.
   TEST_ASSERT_EQUAL_UINT16(18, hcs::ot_slow_read_id(0));
   TEST_ASSERT_EQUAL_UINT16(3, hcs::ot_slow_read_id(1));
   TEST_ASSERT_EQUAL_UINT16(2, hcs::ot_slow_read_id(2));
   TEST_ASSERT_EQUAL_UINT16(15, hcs::ot_slow_read_id(3));
   TEST_ASSERT_EQUAL_UINT16(48, hcs::ot_slow_read_id(4));
   TEST_ASSERT_EQUAL_UINT16(49, hcs::ot_slow_read_id(5));
-  TEST_ASSERT_EQUAL_UINT16(13, hcs::ot_slow_read_id(6));
-  TEST_ASSERT_EQUAL_UINT16(18, hcs::ot_slow_read_id(7));   // wraps
-  TEST_ASSERT_EQUAL_UINT16(18, hcs::ot_slow_read_id(1001)); // 1001 %% 7 == 0
+  TEST_ASSERT_EQUAL_UINT16(57, hcs::ot_slow_read_id(6));
+  TEST_ASSERT_EQUAL_UINT16(13, hcs::ot_slow_read_id(7));
+  TEST_ASSERT_EQUAL_UINT16(18, hcs::ot_slow_read_id(8));   // wraps
+  TEST_ASSERT_EQUAL_UINT16(3, hcs::ot_slow_read_id(1001)); // 1001 %% 8 == 1
+}
+
+void test_ot_registry_sweep_order_and_coverage(void) {
+  // The wire sweep walks SWEEP entries in table order, starting with the
+  // link-critical IDs the old ring had first.
+  uint8_t seen = 0;
+  uint8_t first[8] = {0};
+  for (size_t i = 0; i < kHcsOtIdCount && seen < 8; i++) {
+    if (kHcsOtIds[i].sweep != HCS_OT_SWEEP) continue;
+    first[seen++] = kHcsOtIds[i].id;
+  }
+  TEST_ASSERT_EQUAL_UINT8(3, first[0]);
+  TEST_ASSERT_EQUAL_UINT8(5, first[1]);
+  TEST_ASSERT_EQUAL_UINT8(6, first[2]);
+  // No duplicates anywhere in the table.
+  for (size_t i = 0; i < kHcsOtIdCount; i++)
+    for (size_t j = i + 1; j < kHcsOtIdCount; j++)
+      TEST_ASSERT_NOT_EQUAL(kHcsOtIds[i].id, kHcsOtIds[j].id);
+  // Write-only and indexed IDs never enter the read sweep.
+  for (size_t i = 0; i < kHcsOtIdCount; i++) {
+    uint8_t id = kHcsOtIds[i].id;
+    if (id == 1 || id == 2 || id == 4 || id == 7 || id == 8 || id == 14 ||
+        id == 11 || id == 12)
+      TEST_ASSERT(kHcsOtIds[i].sweep != HCS_OT_SWEEP);
+  }
+  // Every swept ID has a name.
+  for (size_t i = 0; i < kHcsOtIdCount; i++) {
+    if (kHcsOtIds[i].sweep != HCS_OT_SWEEP) continue;
+    TEST_ASSERT_NOT_NULL(kHcsOtIds[i].name);
+    TEST_ASSERT_GREATER_THAN(0, strlen(kHcsOtIds[i].name));
+  }
+}
+
+void test_ot_registry_decode_skips_writes(void) {
+  // WRITE-only IDs never decode: the sweep must not store them even if a
+  // stray READ_ACK arrived.
+  float v = 0;
+  TEST_ASSERT_FALSE(hcs_ot_decode(1, 0x3700, v));
+  TEST_ASSERT_FALSE(hcs_ot_decode(2, 0x1234, v));
+}
+
+void test_ot_decode_types(void) {
+  float v = 0;
+  // f8.8: 0x3700 -> 55.0; negative slope: 0xFECD -> -1.2 (outdoor frost)
+  TEST_ASSERT_TRUE(hcs_ot_decode(25, 0x3700, v));
+  TEST_ASSERT_FLOAT_WITHIN(0.01, 55.0, v);
+  TEST_ASSERT_TRUE(hcs_ot_decode(27, 0xFECD, v));
+  TEST_ASSERT_FLOAT_WITHIN(0.01, -1.2, v);
+  // u16 counters pass through as integers.
+  TEST_ASSERT_TRUE(hcs_ot_decode(116, 1234, v));
+  TEST_ASSERT_FLOAT_WITHIN(0.01, 1234.0, v);
+  // raw pairs pass through untouched for hub-side splitting.
+  TEST_ASSERT_TRUE(hcs_ot_decode(48, 0x3C1E, v));
+  TEST_ASSERT_FLOAT_WITHIN(0.01, 0x3C1E, v);
+  // Unknown and skipped IDs never decode.
+  TEST_ASSERT_FALSE(hcs_ot_decode(200, 0x1234, v));
+  TEST_ASSERT_FALSE(hcs_ot_decode(4, 0x1234, v));
 }
 
 void test_ot_rbp_dhw_write_flag(void) {
@@ -927,6 +988,9 @@ int main(void) {
   RUN_TEST(test_boiler_diag_truncated_buffer_is_safe);
   RUN_TEST(test_ot_clamp_bounds);
   RUN_TEST(test_ot_slow_read_round_robin);
+  RUN_TEST(test_ot_registry_sweep_order_and_coverage);
+  RUN_TEST(test_ot_registry_decode_skips_writes);
+  RUN_TEST(test_ot_decode_types);
   RUN_TEST(test_ot_rbp_dhw_write_flag);
   RUN_TEST(test_ot_fhb_format);
   RUN_TEST(test_fs_states);

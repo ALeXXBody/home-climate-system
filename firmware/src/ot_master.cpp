@@ -383,8 +383,24 @@ void OtMaster::referencePoll() {
 }
 
 void OtMaster::slowRead_() {
-  OpenThermMessageID id =
-      (OpenThermMessageID)hcs::ot_slow_read_id(slow_cycle_++);
+  // Ordinal over the registry's SWEEP entries: every readable boiler-side
+  // ID gets probed in rotation (~40 s per sweep). Non-answers
+  // (DATA_INVALID / UNKNOWN-DATA-ID / timeout) cost one slot and store
+  // nothing, so boilers that answer five IDs behave exactly as before.
+  uint8_t total = 0;
+  for (size_t i = 0; i < kHcsOtIdCount; i++)
+    if (kHcsOtIds[i].sweep == HCS_OT_SWEEP) total++;
+  if (!total) return;
+  uint8_t want = (uint8_t)(slow_cycle_++ % total);
+  uint8_t idnum = 0;
+  for (size_t i = 0; i < kHcsOtIdCount; i++) {
+    if (kHcsOtIds[i].sweep != HCS_OT_SWEEP) continue;
+    if (want-- == 0) {
+      idnum = kHcsOtIds[i].id;
+      break;
+    }
+  }
+  OpenThermMessageID id = (OpenThermMessageID)idnum;
   unsigned long resp = xchg_(
       OpenTherm::buildRequest(OpenThermMessageType::READ_DATA, id, 0));
   if (!xchgOk_() || OpenTherm::getDataID(resp) != id) return;
@@ -442,9 +458,32 @@ void OtMaster::slowRead_() {
         fhb_last_fetch_ms_ = millis();
       }
       break;
-    default:
+    default: {
+      // Generic answered-ID map: any READ_ACK on a swept ID lands here.
+      float v = 0;
+      if (hcs_ot_decode((uint8_t)id, d, v)) noteOtMap((uint8_t)id, v);
       break;
+    }
   }
+}
+
+bool OtMaster::noteOtMap(uint8_t id, float value) {
+  for (uint8_t i = 0; i < kOtMapSize; i++) {
+    if (ot_map_[i].valid && ot_map_[i].id == id) {
+      if (ot_map_[i].value == value) return false;
+      ot_map_[i].value = value;
+      return true;
+    }
+  }
+  for (uint8_t i = 0; i < kOtMapSize; i++) {
+    if (!ot_map_[i].valid) {
+      ot_map_[i].id = id;
+      ot_map_[i].value = value;
+      ot_map_[i].valid = true;
+      return true;
+    }
+  }
+  return false;  // map full — 48 slots cover the 38-entry sweep table
 }
 
 bool OtMaster::indexedRead_(OpenThermMessageID id, uint8_t index,

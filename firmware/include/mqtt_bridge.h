@@ -133,6 +133,9 @@ class MqttBridge {
   void onMessage(char* topic, byte* payload, unsigned int length);
   static void thunk(char* topic, byte* payload, unsigned int length);
   static MqttBridge* instance_;
+  /** Retained answered-ID map (hcs/<node>/ot_map), change-gated. */
+  void publishOtMap();
+  String last_ot_map_;
 
  public:
   static MqttBridge* active() { return instance_; }

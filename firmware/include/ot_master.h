@@ -7,6 +7,7 @@
 #include "hcs_weather_comp.h"
 #include "hcs_sensor_logic.h"
 #include "hcs_ot_caps.h"
+#include "hcs_ot_ids.h"
 
 struct OtSnapshot {
   bool valid = false;
@@ -42,6 +43,10 @@ struct OtSnapshot {
   int8_t dhw_ub = -1, dhw_lb = -1;
   bool valid_maxtset_bounds = false;
   int8_t maxtset_ub = -1, maxtset_lb = -1;
+  // ID 57: the boiler's actual Max CH water setpoint value (the OT-side
+  // ceiling the TSet echo clamps against). Read-only probe for now.
+  bool valid_max_tset = false;
+  float max_tset_c = NAN;
   bool valid_fhb = false;
   uint8_t fhb_size = 0;
   uint8_t fhb_codes[8] = {0};
@@ -50,6 +55,13 @@ struct OtSnapshot {
 
 class OtMaster {
  public:
+  static const uint8_t kOtMapSize = 48;
+  struct OtMapEntry {
+    uint8_t id = 0;
+    float value = 0;
+    bool valid = false;
+  };
+
   OtMaster(int in_pin, int out_pin);
 
   void begin();
@@ -78,6 +90,9 @@ class OtMaster {
    *  read these. */
   bool validTSetCap() const { return valid_tset_cap_; }
   float tsetCap() const { return tset_cap_; }
+  /** Generic answered-ID map for the retained ot_map leaf. */
+  uint8_t otMapSize() const { return kOtMapSize; }
+  const OtMapEntry* otMap() const { return ot_map_; }
   /** One-shot re-test: forget the learned ceiling. The next write goes
    *  out unclamped; a full echo re-learns nothing (cap stays clear), a
    *  low echo re-latches the real ceiling within three confirms. */
@@ -167,6 +182,12 @@ class OtMaster {
   float dhw_setpoint_ = NAN;
   bool failsafe_ = false;
   uint32_t slow_cycle_ = 0;
+  // Generic answered-ID map: every slow-read READ_ACK lands here, so any
+  // boiler (or future OT extension) that answers an ID shows up in the
+  // retained ot_map leaf and /api/status without per-ID code.
+  OtMapEntry ot_map_[kOtMapSize];
+  /** Store an ACKed slow-read value; returns true when the map changed. */
+  bool noteOtMap(uint8_t id, float value);
   uint8_t rot_ = 0;                 // optional-read round robin
   uint8_t status_fail_streak_ = 0;  // hysteresis before clearing ot_valid
   OpenThermResponseStatus last_status_ = OpenThermResponseStatus::NONE;

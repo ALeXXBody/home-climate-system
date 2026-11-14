@@ -814,6 +814,14 @@ void NetServices::beginHttp(const HcsSettings& settings, const String& nodeId) {
     doc["tset_cap"] = ot_.validTSetCap()
                           ? String(ot_.tsetCap(), 1)
                           : String((const char*)nullptr);
+    {
+      JsonObject m = doc["ot_map"].to<JsonObject>();
+      for (uint8_t i = 0; i < ot_.otMapSize(); i++) {
+        const auto& e = ot_.otMap()[i];
+        if (!e.valid) continue;
+        m[String(e.id)] = roundf(e.value * 10) / 10.0f;
+      }
+    }
     doc["max_modulation"] = ot_.maxModulation();
 
     doc["wc_enable"] = ot_.weatherComp();

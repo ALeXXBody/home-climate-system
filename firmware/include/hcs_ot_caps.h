@@ -30,7 +30,7 @@ inline float ot_clamp_with_bounds(float v, bool have_bounds, float lb, float ub,
  * Order: pressure, slave-cfg, master-cfg, capacity, DHW bounds,
  * MaxTSet bounds, FHB size, then repeats. Cheap enough for 1 slot/s.
  */
-constexpr uint8_t kSlowReadCount = 7;
+constexpr uint8_t kSlowReadCount = 8;
 constexpr uint16_t kSlowReadIds[kSlowReadCount] = {
     18,  // CHPressure
     3,   // SConfigSMemberIDcode
@@ -38,6 +38,7 @@ constexpr uint16_t kSlowReadIds[kSlowReadCount] = {
     15,  // MaxCapacityMinModLevel
     48,  // TdhwSetUB/LB
     49,  // MaxTSetUB/LB  (spec: 49 = MaxTSetUBMaxTSetLB)
+    57,  // MaxTSet value (the OT-side CH ceiling)
     13,  // FHBsize
 };
 inline uint16_t ot_slow_read_id(uint32_t cycle_i) {

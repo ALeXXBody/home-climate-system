@@ -393,6 +393,7 @@ bool MqttBridge::publishTelemetry(const OtSnapshot& s) {
   // within one heartbeat of the boiler being reconfigured.
   publish(hcsTopic(node_id_, "tset_cap"),
           ot_.validTSetCap() ? f2(ot_.tsetCap()) : String("off"));
+  publishOtMap();
   if (s.valid_pressure)
     publish(hcsTopic(node_id_, "ch_pressure"), f2(s.pressure_bar));
   if (!isnan(ot_.dhwSetpoint()))
@@ -523,4 +524,30 @@ bool MqttBridge::publishTelemetry(const OtSnapshot& s) {
     }
   }
   return critical_ok;
+}
+
+void MqttBridge::publishOtMap() {
+  // Retained answered-ID map, change-gated: {"57":80.0,"115":0,...}.
+  // Keys are numeric ID strings; the hub resolves names from its own copy
+  // of the registry. Floats for F88/U16, integer-valued for RAW pairs.
+  String j = "{";
+  bool first = true;
+  for (uint8_t i = 0; i < ot_.otMapSize(); i++) {
+    const auto& e = ot_.otMap()[i];
+    if (!e.valid) continue;
+    if (!first) j += ',';
+    first = false;
+    j += '"';
+    j += String(e.id);
+    j += "\":";
+    char buf[16];
+    dtostrf(e.value, 0, 1, buf);
+    j += buf;
+  }
+  j += '}';
+  if (first) return;  // nothing answered yet — leave any retained copy alone
+  if (j != last_ot_map_) {
+    publish(hcsTopic(node_id_, "ot_map"), j, true);
+    last_ot_map_ = j;
+  }
 }
