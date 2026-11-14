@@ -74,14 +74,21 @@ jobs:
         working-directory: firmware
         run: |
           # d1_mini (ESP8266): stock 4 MB slot headroom.
-          # esp32_d1_mini(+gw): OTA-updatable fleet — must fit the stock
+          # esp32_d1_mini: the deployed OTA fleet — must fit the stock
           #   1310720 B OTA slot, because OTA cannot rewrite the partition
           #   table; deployed boards still run the stock one.
+          # esp32_d1_mini_gw: NO deployed board (single-house fleet,
+          #   2026-11-14). Gateway boards are adopted over USB first flash
+          #   with the enlarged table (like every other non-deployed env),
+          #   so it budgets 1441792 B until a gw board actually deploys —
+          #   then it moves back under the stock-slot gate AND gets a real
+          #   size diet first (v1.5.35/36 showed 80 B over with an
+          #   unexplained ~4.5 KB CI-vs-local delta still open).
           # All other envs: not yet deployed → first flash is USB with the
           #   enlarged table (app slots 1441792 B), so their budget is that.
           case "${{ matrix.env }}" in
             d1_mini) LIMIT=980000 ;;
-            esp32_d1_mini|esp32_d1_mini_gw) LIMIT=1310720 ;;
+            esp32_d1_mini) LIMIT=1310720 ;;
             *) LIMIT=1441792 ;;
           esac
           SIZE=$(stat -c%s .pio/build/${{ matrix.env }}/firmware.bin)
