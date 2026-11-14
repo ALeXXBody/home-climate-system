@@ -147,8 +147,7 @@ void OtMaster::loop() {
 void OtMaster::setChEnable(bool on) { ch_enable_ = on; }
 void OtMaster::setDhwEnable(bool on) { dhw_enable_ = on; }
 
-void OtMaster::setDhwSetpoint(float c) {
-  // NAN = release ("off"/"auto") — never clamped.
+void OtMaster::setDhwSetpoint(float c) {  // NAN = release ("off"/"auto") — never clamped.
   if (isnan(c)) {
     dhw_setpoint_ = c;
     return;
@@ -174,6 +173,20 @@ void OtMaster::setMaxModulation(int percent) {
   if (percent < 0) percent = 0;
   if (percent > 100) percent = 100;
   max_mod_ = percent;
+}
+
+void OtMaster::setMaxTSet(float c) {
+  if (isnan(c)) return;
+  // Clamp to the boiler's stated ID 49 range when known (a request above
+  // the boiler's own upper bound is rejected anyway); hard floor/ceiling
+  // otherwise. The read-back on the next sweeps is the verdict.
+  float hi = snap_.valid_maxtset_bounds ? (float)snap_.maxtset_ub : 90.0f;
+  if (hi < 20) hi = 90;
+  if (c < 20.0f) c = 20.0f;
+  if (c > hi) c = hi;
+  max_tset_cmd_ = roundf(c * 2.0f) / 2.0f;
+  max_tset_tries_ = 0;
+  HCS_LOG("ot", "max-TSet command queued: %.1f C", (double)max_tset_cmd_);
 }
 
 bool OtMaster::setWeatherCompCfg(const char* csv) {
@@ -458,6 +471,19 @@ void OtMaster::slowRead_() {
         fhb_last_fetch_ms_ = millis();
       }
       break;
+    case 57: {
+      float v = 0;
+      if (hcs_ot_decode(57, d, v)) {
+        noteOtMap(57, v);
+        if (!isnan(max_tset_cmd_) && fabsf(v - max_tset_cmd_) <= 0.5f) {
+          HCS_LOG("ot", "max-TSet read-back %.1f C matches — command done",
+                  (double)v);
+          max_tset_cmd_ = NAN;
+          max_tset_tries_ = 0;
+        }
+      }
+      break;
+    }
     default: {
       // Generic answered-ID map: any READ_ACK on a swept ID lands here.
       float v = 0;
@@ -651,6 +677,20 @@ void OtMaster::doPoll_() {
                                       OpenThermMessageID::TdhwSet,
                                       (unsigned int)(c * 256)));
         last_dhw_write_ms_ = millis();
+      }
+      // Max CH setpoint (ID 57) write shares this slot while a command is
+      // outstanding: at most 12 attempts, and the sweep's read-back clears
+      // it early on a match. No read-back match after 12 tries = the boiler
+      // ignored it; stop spamming and leave the verdict in the ot_map.
+      if (!isnan(max_tset_cmd_) && max_tset_tries_ < 12 &&
+          millis() - last_maxtset_write_ms_ >= 10000UL) {
+        xchg_(OpenTherm::buildRequest(OpenThermMessageType::WRITE_DATA,
+                                      OpenThermMessageID::MaxTSet,
+                                      (unsigned int)(max_tset_cmd_ * 256)));
+        last_maxtset_write_ms_ = millis();
+        max_tset_tries_++;
+        HCS_LOG("ot", "max-TSet write %.1f C (try %u)",
+                (double)max_tset_cmd_, max_tset_tries_);
       }
       break;
     }

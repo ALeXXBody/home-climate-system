@@ -105,6 +105,13 @@ class OtMaster {
   void setFailsafeHeat(bool on) { failsafe_ = on; }
   bool failsafeHeat() const { return failsafe_; }
 
+  /** Set the boiler's Max CH water setpoint (ID 57). One-shot remote
+   *  command: written on the throttled slot until the sweep reads the
+   *  value back (or 12 attempts pass). A boiler that ignores it simply
+   *  keeps its old value — the read-back is the verdict. */
+  void setMaxTSet(float c);
+  bool maxTSetPending() const { return !isnan(max_tset_cmd_); }
+
   void referencePoll();
   /** A head-end command (MQTT or the portal) arrived. Failsafe release
    *  must not overwrite it with the pre-outage snapshot. */
@@ -180,6 +187,9 @@ class OtMaster {
   const hcs::TempValue* inj_outdoor_ = nullptr;
   const hcs::TempValue* inj_return_ = nullptr;
   float dhw_setpoint_ = NAN;
+  float max_tset_cmd_ = NAN;  // pending ID 57 write; NAN = none outstanding
+  uint8_t max_tset_tries_ = 0;
+  unsigned long last_maxtset_write_ms_ = 0;
   bool failsafe_ = false;
   uint32_t slow_cycle_ = 0;
   // Generic answered-ID map: every slow-read READ_ACK lands here, so any

@@ -181,6 +181,18 @@ void test_clear_tset_cap_parses_with_any_payload(void) {
   TEST_ASSERT_EQUAL(HCS_CMD_NONE, other.cmd);
 }
 
+void test_max_tset_parses_float(void) {
+  HcsCommandResult r = parse("hcs/n/set/max_tset", "75");
+  TEST_ASSERT_EQUAL(HCS_CMD_MAX_TSET, r.cmd);
+  TEST_ASSERT_FLOAT_WITHIN(0.01, 75.0, r.float_value);
+  HcsCommandResult garbage = parse("hcs/n/set/max_tset", "hot");
+  TEST_ASSERT_EQUAL(HCS_CMD_MAX_TSET, garbage.cmd);
+  TEST_ASSERT_FLOAT_WITHIN(0.01, 0.0, garbage.float_value);
+  // Must not collide with its neighbours.
+  TEST_ASSERT_EQUAL(HCS_CMD_NONE,
+                    parse("hcs/n/set/max_tset/extra", "75").cmd);
+}
+
 // ---------- unknown topics & safety ----------
 void test_unknown_topic_ignored(void) {
   HcsCommandResult r = parse("hcs/n/set/not_a_command", "1");
@@ -943,6 +955,7 @@ int main(void) {
   RUN_TEST(test_max_modulation_clamped);
   RUN_TEST(test_reboot_and_ota_url);
   RUN_TEST(test_clear_tset_cap_parses_with_any_payload);
+  RUN_TEST(test_max_tset_parses_float);
   RUN_TEST(test_unknown_topic_ignored);
   RUN_TEST(test_prefix_must_not_leak_into_other_commands);
   RUN_TEST(test_null_inputs_safe);

@@ -14,6 +14,9 @@
  *   .../weather_comp   ON|OFF|1|0|true|false
  *   .../weather_comp_cfg  "<ref>,<design>,<fmax>,<fmin>" (see hcs_weather_comp.h)
  *   .../reboot         payload ignored
+ *   .../max_tset       float °C: set the boiler's Max CH water setpoint
+ *                      (ID 57). Clamped 20-90 and to the ID 49 bounds when
+ *                      known; the next sweep's read-back is the verdict.
  *   .../clear_tset_cap payload ignored: forget the learned CH ceiling so
  *                      the next TSet write re-tests the boiler unclamped
  *   .../ota_url        payload ignored here (URL passed through)
@@ -37,6 +40,7 @@ enum HcsCommand {
   HCS_CMD_WEATHER_COMP,
   HCS_CMD_WEATHER_COMP_CFG,
   HCS_CMD_REBOOT,
+  HCS_CMD_MAX_TSET,
   HCS_CMD_CLEAR_TSET_CAP,
   HCS_CMD_OTA_URL,
   HCS_CMD_GW_MODE,
@@ -122,6 +126,11 @@ inline HcsCommandResult hcs_parse_command(const char* topic, const char* payload
   }
   if (hcs_ends_with(topic, "/reboot")) {
     r.cmd = HCS_CMD_REBOOT;
+    return r;
+  }
+  if (hcs_ends_with(topic, "/max_tset")) {
+    r.cmd = HCS_CMD_MAX_TSET;
+    r.float_value = (float)atof(payload);
     return r;
   }
   if (hcs_ends_with(topic, "/clear_tset_cap")) {

@@ -145,6 +145,7 @@ void MqttBridge::subscribeAll() {
   mqtt_.subscribe(hcsSetTopic(node_id_, "ota_url").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "settings").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "reboot").c_str());
+  mqtt_.subscribe(hcsSetTopic(node_id_, "max_tset").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "clear_tset_cap").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "led").c_str());
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
@@ -211,8 +212,15 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
       delay(150);
       ESP.restart();
       break;
-    case HCS_CMD_CLEAR_TSET_CAP: {
-      // No payload edge required: forgetting the ceiling is idempotent,
+    case HCS_CMD_MAX_TSET: {
+      // No retained edge required: the value itself is the command, and a
+      // stale retained copy merely re-asserts the same ceiling. Still
+      // cleared after applying so a reconnect cannot surprise anyone.
+      ot_.setMaxTSet(r.float_value);
+      clearRetained(topic);
+      break;
+    }
+    case HCS_CMD_CLEAR_TSET_CAP: {      // No payload edge required: forgetting the ceiling is idempotent,
       // and a real ceiling re-latches from the next echoes by itself.
       // Clear the retained copy too so a reconnect cannot surprise us
       // with a stale re-test weeks later.
