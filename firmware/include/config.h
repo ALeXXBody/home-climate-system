@@ -2,7 +2,7 @@
 // Compile-time defaults. Runtime WiFi/MQTT come from captive portal (NVS).
 
 #ifndef HCS_FW_VERSION
-#define HCS_FW_VERSION "1.5.32"
+#define HCS_FW_VERSION "1.5.33"
 
 // ---- Pull-based self-update (v1.5.30) ------------------------------------
 // The board fetches the hub's own static update manifest over plain LAN

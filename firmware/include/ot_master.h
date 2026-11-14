@@ -78,6 +78,14 @@ class OtMaster {
    *  read these. */
   bool validTSetCap() const { return valid_tset_cap_; }
   float tsetCap() const { return tset_cap_; }
+  /** One-shot re-test: forget the learned ceiling. The next write goes
+   *  out unclamped; a full echo re-learns nothing (cap stays clear), a
+   *  low echo re-latches the real ceiling within three confirms. */
+  void clearTSetCap() {
+    valid_tset_cap_ = false;
+    tset_cap_ = 0.0f;
+    tset_confirm_ = 0;
+  }
 
   void setFailsafeHeat(bool on) { failsafe_ = on; }
   bool failsafeHeat() const { return failsafe_; }

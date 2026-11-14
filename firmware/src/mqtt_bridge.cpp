@@ -145,6 +145,7 @@ void MqttBridge::subscribeAll() {
   mqtt_.subscribe(hcsSetTopic(node_id_, "ota_url").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "settings").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "reboot").c_str());
+  mqtt_.subscribe(hcsSetTopic(node_id_, "clear_tset_cap").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "led").c_str());
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   mqtt_.subscribe(hcsSetTopic(node_id_, "gw/set_mode").c_str());
@@ -210,6 +211,16 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
       delay(150);
       ESP.restart();
       break;
+    case HCS_CMD_CLEAR_TSET_CAP: {
+      // No payload edge required: forgetting the ceiling is idempotent,
+      // and a real ceiling re-latches from the next echoes by itself.
+      // Clear the retained copy too so a reconnect cannot surprise us
+      // with a stale re-test weeks later.
+      clearRetained(topic);
+      ot_.clearTSetCap();
+      HCS_LOG("mqtt", "tset cap cleared by head-end; next write unclamped");
+      break;
+    }
     case HCS_CMD_OTA_URL:
       if (ota_cb_ && payload.length()) {
         clearRetained(topic);  // one-shot: don't re-flash on every reconnect

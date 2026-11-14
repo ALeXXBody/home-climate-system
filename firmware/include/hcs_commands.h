@@ -14,6 +14,8 @@
  *   .../weather_comp   ON|OFF|1|0|true|false
  *   .../weather_comp_cfg  "<ref>,<design>,<fmax>,<fmin>" (see hcs_weather_comp.h)
  *   .../reboot         payload ignored
+ *   .../clear_tset_cap payload ignored: forget the learned CH ceiling so
+ *                      the next TSet write re-tests the boiler unclamped
  *   .../ota_url        payload ignored here (URL passed through)
  *   .../settings       partial JSON, same fields as POST /api/settings
  *   .../gw/set_mode    "gateway" | "master_only" (gateway builds only)
@@ -35,6 +37,7 @@ enum HcsCommand {
   HCS_CMD_WEATHER_COMP,
   HCS_CMD_WEATHER_COMP_CFG,
   HCS_CMD_REBOOT,
+  HCS_CMD_CLEAR_TSET_CAP,
   HCS_CMD_OTA_URL,
   HCS_CMD_GW_MODE,
   HCS_CMD_GW_OVERRIDE_SETPOINT,
@@ -119,6 +122,12 @@ inline HcsCommandResult hcs_parse_command(const char* topic, const char* payload
   }
   if (hcs_ends_with(topic, "/reboot")) {
     r.cmd = HCS_CMD_REBOOT;
+    return r;
+  }
+  if (hcs_ends_with(topic, "/clear_tset_cap")) {
+    // Idempotent: clearing an already-clear ceiling is a no-op, and a
+    // real ceiling re-latches from the next echoes on its own.
+    r.cmd = HCS_CMD_CLEAR_TSET_CAP;
     return r;
   }
   if (hcs_ends_with(topic, "/ota_url")) {

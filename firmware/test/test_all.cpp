@@ -158,13 +158,26 @@ void test_max_modulation_clamped(void) {
 
 }
 
-// ---------- reboot / ota_url ----------
+// ---------- reboot / ota_url / clear_tset_cap ----------
 void test_reboot_and_ota_url(void) {
   HcsCommandResult rb = parse("hcs/n/set/reboot", "");
   TEST_ASSERT_EQUAL(HCS_CMD_REBOOT, rb.cmd);
 
   HcsCommandResult ota = parse("hcs/n/set/ota_url", "http://x/fw.bin");
   TEST_ASSERT_EQUAL(HCS_CMD_OTA_URL, ota.cmd);
+}
+
+void test_clear_tset_cap_parses_with_any_payload(void) {
+  // Forgetting the ceiling is idempotent: empty, "clear" and "1" all work,
+  // so a retained leftover can never wedge the parser — and the dispatch
+  // clears the retained copy so it cannot re-fire weeks later.
+  for (auto p : {"", "clear", "1"}) {
+    HcsCommandResult r = parse("hcs/n/set/clear_tset_cap", p);
+    TEST_ASSERT_EQUAL_MESSAGE(HCS_CMD_CLEAR_TSET_CAP, r.cmd, p);
+  }
+  // Suffix match only: must not leak into flow_setpoint or vice versa.
+  HcsCommandResult other = parse("hcs/n/set/clear_tset_cap/extra", "1");
+  TEST_ASSERT_EQUAL(HCS_CMD_NONE, other.cmd);
 }
 
 // ---------- unknown topics & safety ----------
@@ -868,6 +881,7 @@ int main(void) {
   RUN_TEST(test_flow_setpoint_garbage_is_zero);
   RUN_TEST(test_max_modulation_clamped);
   RUN_TEST(test_reboot_and_ota_url);
+  RUN_TEST(test_clear_tset_cap_parses_with_any_payload);
   RUN_TEST(test_unknown_topic_ignored);
   RUN_TEST(test_prefix_must_not_leak_into_other_commands);
   RUN_TEST(test_null_inputs_safe);
