@@ -213,17 +213,18 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
       ESP.restart();
       break;
     case HCS_CMD_MAX_TSET: {
-      // No retained edge required: the value itself is the command, and a
-      // stale retained copy merely re-asserts the same ceiling. Still
-      // cleared after applying so a reconnect cannot surprise anyone.
-      ot_.setMaxTSet(r.float_value);
-      clearRetained(topic);
+      // Empty payload = the board's own retained-clear echo (the broker
+      // delivers our zero-length retained publish back to us). Acting on
+      // it atof()s to 0 and pinned a live house in a self-triggering
+      // loop (v1.5.35) — ignore. Our own publishes always carry a value.
+      if (payload.length()) { ot_.setMaxTSet(r.float_value); clearRetained(topic); }
       break;
     }
-    case HCS_CMD_CLEAR_TSET_CAP: {      // No payload edge required: forgetting the ceiling is idempotent,
-      // and a real ceiling re-latches from the next echoes by itself.
-      // Clear the retained copy too so a reconnect cannot surprise us
-      // with a stale re-test weeks later.
+    case HCS_CMD_CLEAR_TSET_CAP: {
+      // Same self-echo rule as MAX_TSET: ignore our own zero-length echo.
+      // Our own publishes always carry "clear". Without this guard the
+      // board re-clears in a tight loop on every echo (harmless but noisy).
+      if (payload.length() == 0) break;
       clearRetained(topic);
       ot_.clearTSetCap();
       HCS_LOG("mqtt", "tset cap cleared by head-end; next write unclamped");

@@ -181,6 +181,32 @@ void test_clear_tset_cap_parses_with_any_payload(void) {
   TEST_ASSERT_EQUAL(HCS_CMD_NONE, other.cmd);
 }
 
+void test_max_tset_sanitize_accepts_and_clamps(void) {
+  float v = 0;
+  // Normal value passes through on the 0.5 grid.
+  v = hcs::ot_max_tset_sanitize(75.0f, true, 80);
+  TEST_ASSERT_FLOAT_WITHIN(0.01, 75.0, v);
+  // Above the boiler's stated bound clamps down to it.
+  v = hcs::ot_max_tset_sanitize(85.0f, true, 80);
+  TEST_ASSERT_FLOAT_WITHIN(0.01, 80.0, v);
+  // Unknown bounds: hard ceiling only.
+  v = hcs::ot_max_tset_sanitize(95.0f, false, 0);
+  TEST_ASSERT_FLOAT_WITHIN(0.01, 90.0, v);
+}
+
+void test_max_tset_sanitize_rejects_garbage(void) {
+  // Empty/garbage MQTT payloads atof() to 0 — the v1.5.35 loop that pinned
+  // a live house at 20 C. All of these must be ignored, never written.
+  float v = hcs::ot_max_tset_sanitize(0.0f, true, 80);
+  TEST_ASSERT_TRUE(v != v);
+  v = hcs::ot_max_tset_sanitize(19.5f, true, 80);
+  TEST_ASSERT_TRUE(v != v);
+  v = hcs::ot_max_tset_sanitize(91.0f, true, 80);
+  TEST_ASSERT_FLOAT_WITHIN(0.01, 80.0, v);  // over-range clamps, not rejects
+  v = hcs::ot_max_tset_sanitize((0.0f / 0.0f), true, 80);
+  TEST_ASSERT_TRUE(v != v);
+}
+
 void test_max_tset_parses_float(void) {
   HcsCommandResult r = parse("hcs/n/set/max_tset", "75");
   TEST_ASSERT_EQUAL(HCS_CMD_MAX_TSET, r.cmd);
@@ -954,6 +980,8 @@ int main(void) {
   RUN_TEST(test_reboot_and_ota_url);
   RUN_TEST(test_clear_tset_cap_parses_with_any_payload);
   RUN_TEST(test_max_tset_parses_float);
+  RUN_TEST(test_max_tset_sanitize_accepts_and_clamps);
+  RUN_TEST(test_max_tset_sanitize_rejects_garbage);
   RUN_TEST(test_unknown_topic_ignored);
   RUN_TEST(test_prefix_must_not_leak_into_other_commands);
   RUN_TEST(test_null_inputs_safe);

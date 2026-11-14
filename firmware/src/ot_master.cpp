@@ -176,15 +176,18 @@ void OtMaster::setMaxModulation(int percent) {
 }
 
 void OtMaster::setMaxTSet(float c) {
-  if (isnan(c)) return;
-  // Clamp to the boiler's stated ID 49 range when known (a request above
-  // the boiler's own upper bound is rejected anyway); hard floor/ceiling
-  // otherwise. The read-back on the next sweeps is the verdict.
-  float hi = snap_.valid_maxtset_bounds ? (float)snap_.maxtset_ub : 90.0f;
-  if (hi < 20) hi = 90;
-  if (c < 20.0f) c = 20.0f;
-  if (c > hi) c = hi;
-  max_tset_cmd_ = roundf(c * 2.0f) / 2.0f;
+  // Reject, don't clamp: an empty or garbage MQTT payload atof()s to 0,
+  // and clamping that to 20 pinned a live house at 20 C while the board
+  // re-delivered its own retained clear to itself in a tight loop
+  // (v1.5.35 field incident). Out-of-range values are operator error and
+  // must never move the boiler. The sweep's read-back is the verdict.
+  float s = hcs::ot_max_tset_sanitize(c, snap_.valid_maxtset_bounds,
+                                      snap_.maxtset_ub);
+  if (s != s) {
+    HCS_LOG("ot", "max-TSet %.1f rejected (valid range 20-90)", (double)c);
+    return;
+  }
+  max_tset_cmd_ = s;
   max_tset_tries_ = 0;
   HCS_LOG("ot", "max-TSet command queued: %.1f C", (double)max_tset_cmd_);
 }

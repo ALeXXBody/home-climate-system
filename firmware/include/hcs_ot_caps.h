@@ -45,6 +45,26 @@ inline uint16_t ot_slow_read_id(uint32_t cycle_i) {
   return kSlowReadIds[cycle_i % kSlowReadCount];
 }
 
+/**
+ * Sanitize a head-end Max CH setpoint (ID 57) before it touches the wire.
+ * Returns NAN when the value must be ignored: below the usable floor
+ * (an empty/garbage MQTT payload atof()s to 0 — clamping that to 20
+ * pinned a live house at 20 C in a self-triggering retained-echo loop,
+ * v1.5.35), above 90, or NaN. Otherwise clamps to the boiler's stated
+ * ID 49 upper bound when known. Rounds to the 0.5 grid the bus uses.
+ */
+inline float ot_max_tset_sanitize(float c, bool have_bounds, int8_t ub) {
+  // Below the usable floor (or NaN): an empty/garbage MQTT payload atof()s
+  // to 0 — reject, never clamp (clamping pinned a live house at 20 C in a
+  // self-triggering retained-echo loop, v1.5.35).
+  if (!(c >= 20.0f)) return (0.0f / 0.0f);
+  float hi = (have_bounds && ub >= 20) ? (float)ub : 90.0f;
+  if (c > hi) c = hi;
+  if (c > 90.0f) c = 90.0f;
+  float r = (float)((int)(c * 2.0f + 0.5f)) / 2.0f;
+  return r;
+}
+
 /** True when the remote-parameter write bit for TdhwSet (D) is enabled. */
 inline bool ot_rbp_dhw_write_enabled(uint8_t write_flags) {
   return write_flags & 0x10;  // parameter D -> bit 4 of write-enable byte
