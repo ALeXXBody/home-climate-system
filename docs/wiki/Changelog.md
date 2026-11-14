@@ -10,6 +10,7 @@ depend on MQTT at all.
 
 | Version | Change |
 |---|---|
+| [v1.5.34](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.34) | Full OpenTherm ID registry sweep: every readable boiler-side ID probed in rotation, answers in the retained `ot_map` leaf and `/api/status` (includes ID 57, the OT-side CH ceiling value) |
 | [v1.5.33](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.33) | One-shot `clear_tset_cap` command: forget the learned CH ceiling so the next TSet write re-tests the boiler unclamped; a genuine ceiling re-latches on its own |
 | [v1.5.32](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.32) | A missed outdoor or return read keeps the last temperature instead of publishing nothing |
 | [v1.5.31](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.31) | ESP8266 collects Origin and Cookie through the variadic header API; the array form is ESP32-only |
