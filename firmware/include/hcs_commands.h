@@ -23,6 +23,9 @@
  *   .../settings       partial JSON, same fields as POST /api/settings
  *   .../gw/set_mode    "gateway" | "master_only" (gateway builds only)
  *   .../gw/override_setpoint  float °C | off/auto/release (gateway builds only)
+ *   .../check_update   anything non-empty: fetch latest.json NOW instead of
+ *                      waiting for the 6 h cadence (deferred while a burn or
+ *                      an OTA is in flight, like the scheduled check)
  */
 
 #include <string.h>
@@ -47,6 +50,8 @@ enum HcsCommand {
   HCS_CMD_GW_OVERRIDE_SETPOINT,
   HCS_CMD_SETTINGS,
   HCS_CMD_LED,
+  HCS_CMD_CHECK_UPDATE,
+  HCS_CMD_COUNT,  // sentinel: dispatch matrix test enumerates to here
 };
 
 struct HcsCommandResult {
@@ -72,6 +77,24 @@ inline bool hcs_ieq(const char* a, const char* b) {
     ++b;
   }
   return *a == *b;
+}
+
+/**
+ * Dispatch policy: what may act, and on which payload.
+ *
+ * Rule (v1.5.36 field incident): NO command acts on an empty payload.
+ * clearRetained() publishes a zero-length retained message; the broker
+ * delivers our own echo back to us, atof("") is 0, and a clamped 0 pinned
+ * a live house at 20 C in a ~25 Hz self-triggering loop. Single choke
+ * point — every present and future command is covered, matrix-tested
+ * below in test_all.cpp.
+ */
+enum HcsDispatch { HCS_DISP_IGNORE = 0, HCS_DISP_APPLY = 1 };
+
+inline HcsDispatch hcs_dispatch(HcsCommand cmd, bool has_payload) {
+  if (!has_payload) return HCS_DISP_IGNORE;
+  if (cmd == HCS_CMD_NONE || cmd >= HCS_CMD_COUNT) return HCS_DISP_IGNORE;
+  return HCS_DISP_APPLY;
 }
 
 inline bool hcs_truthy(const char* v) {
@@ -151,6 +174,10 @@ inline HcsCommandResult hcs_parse_command(const char* topic, const char* payload
   if (hcs_ends_with(topic, "/led")) {
     // payload: "on" | "off" | number (brightness 1-255)
     r.cmd = HCS_CMD_LED;
+    return r;
+  }
+  if (hcs_ends_with(topic, "/check_update")) {
+    r.cmd = HCS_CMD_CHECK_UPDATE;
     return r;
   }
   if (hcs_ends_with(topic, "/failsafe_cfg")) {

@@ -78,6 +78,8 @@ class MqttBridge {
   void onSettings(void (*cb)(const String& json)) { settings_cb_ = cb; }
   /** Status LED command over MQTT: .../set/led ("on"/"off"/brightness 1-255). */
   void onLed(void (*cb)(const String& payload)) { led_cb_ = cb; }
+  /** Pull-based self-update check right now: fetch latest.json immediately. */
+  void onCheckUpdate(void (*cb)()) { check_update_cb_ = cb; }
 
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   /** Gateway builds: expose live gateway + current mode string. */
@@ -117,6 +119,7 @@ class MqttBridge {
   void (*ota_cb_)(const String&) = nullptr;
   void (*settings_cb_)(const String&) = nullptr;
   void (*led_cb_)(const String&) = nullptr;
+  void (*check_update_cb_)() = nullptr;
   void (*fs_cfg_cb_)(const String&) = nullptr;
   hcs::FsState* fs_state_ptr_ = nullptr;
   hcs::HcsSensors* sensors_ = nullptr;

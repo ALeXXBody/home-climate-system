@@ -51,6 +51,10 @@ class NetServices {
   /** Hub host for the pull (the broker host belongs to the same HA box). */
   void beginAutoUpdate(const String& hub_host) { hub_host_ = hub_host; }
   void checkForAutoUpdate();
+  /** Hub asked for an update check right now (MQTT set/check_update):
+   *  the next loop pass fetches latest.json immediately instead of
+   *  waiting for the 6 h cadence. Burn/OTA guards still apply. */
+  void requestAutoUpdateCheck() { auto_update_now_ = true; }
 
   void loop();
 
@@ -141,6 +145,7 @@ class NetServices {
   HcsSettings& liveCfg() { return shared_ ? *shared_ : settings_; }
   const HcsSettings& liveCfg() const { return shared_ ? *shared_ : settings_; }
   bool reboot_pending_ = false;
+  bool auto_update_now_ = false;
   bool ota_busy_ = false;
   String hub_host_;
   unsigned long ota_last_report_ms_ = 0;

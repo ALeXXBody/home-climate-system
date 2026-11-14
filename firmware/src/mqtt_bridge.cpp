@@ -148,6 +148,7 @@ void MqttBridge::subscribeAll() {
   mqtt_.subscribe(hcsSetTopic(node_id_, "max_tset").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "clear_tset_cap").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "led").c_str());
+  mqtt_.subscribe(hcsSetTopic(node_id_, "check_update").c_str());
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
   mqtt_.subscribe(hcsSetTopic(node_id_, "gw/set_mode").c_str());
   mqtt_.subscribe(hcsSetTopic(node_id_, "gw/override_setpoint").c_str());
@@ -172,7 +173,14 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
     return;
   }
 
-  HcsCommandResult r = hcs_parse_command(topic.c_str(), payload.c_str());
+  // Single dispatch gate (rule 23): empty payloads never act. This covers
+  // our own retained-clear echoes and any empty leftovers, for every
+  // present and future command — see hcs_dispatch() + its matrix test.
+  HcsCommandResult probe = hcs_parse_command(topic.c_str(), payload.c_str());
+  if (hcs_dispatch(probe.cmd, payload.length() > 0) == HCS_DISP_IGNORE)
+    return;
+
+  HcsCommandResult r = probe;  // parsed once for the gate above
   switch (r.cmd) {
     case HCS_CMD_CH_ENABLE:
       ot_.noteHeadEndCommand();
@@ -244,6 +252,12 @@ void MqttBridge::handleCommand(const String& topic, const String& payload) {
       break;
     case HCS_CMD_LED:
       if (led_cb_ && payload.length()) led_cb_(payload);
+      break;
+    case HCS_CMD_CHECK_UPDATE:
+      // hcs_dispatch already rejected the empty echo above; a real payload
+      // means "the hub wants the board to look for firmware right now".
+      if (check_update_cb_) check_update_cb_();
+      clearRetained(topic);  // one-shot: don't re-check on every reconnect
       break;
 #if defined(ESP32) && defined(HCS_GW_ENABLE)
     case HCS_CMD_GW_MODE:

@@ -22,6 +22,7 @@ jobs:
         run: pio test -e native
 
   build:
+    needs: [native-tests]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

@@ -1681,7 +1681,11 @@ void NetServices::checkForAutoUpdate() {
   static unsigned long last_check_ms_ = 0;
   static bool first_check_done_ = false;
   unsigned long now = millis();
-  if (!first_check_done_) {
+  if (auto_update_now_) {
+    auto_update_now_ = false;  // explicit hub request: skip the cadence,
+    first_check_done_ = true;  // but NOT the burn/OTA guards below
+    HCS_LOG("ota", "update check requested by head-end");
+  } else if (!first_check_done_) {
     if (now < AUTO_CHECK_FIRST_DELAY_MS) return;   // boot grace
     first_check_done_ = true;
   } else if (now - last_check_ms_ < AUTO_CHECK_EVERY_MS) {

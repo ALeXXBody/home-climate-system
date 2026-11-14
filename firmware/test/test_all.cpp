@@ -207,6 +207,27 @@ void test_max_tset_sanitize_rejects_garbage(void) {
   TEST_ASSERT_TRUE(v != v);
 }
 
+void test_check_update_parses(void) {
+  HcsCommandResult r = parse("hcs/n/set/check_update", "1");
+  TEST_ASSERT_EQUAL(HCS_CMD_CHECK_UPDATE, r.cmd);
+}
+
+// Rule 23, the v1.5.35 class, locked in: NO command acts on an empty
+// payload (our own retained-clear echoes). Matrix over every command.
+void test_dispatch_matrix_empty_never_acts(void) {
+  for (int c = 0; c <= (int)HCS_CMD_COUNT; c++) {
+    HcsCommand cmd = (HcsCommand)c;
+    TEST_ASSERT_EQUAL(HCS_DISP_IGNORE, hcs_dispatch(cmd, false));
+    if (cmd == HCS_CMD_NONE) {
+      TEST_ASSERT_EQUAL(HCS_DISP_IGNORE, hcs_dispatch(cmd, true));
+    } else if (cmd < HCS_CMD_COUNT) {
+      TEST_ASSERT_EQUAL(HCS_DISP_APPLY, hcs_dispatch(cmd, true));
+    } else {
+      TEST_ASSERT_EQUAL(HCS_DISP_IGNORE, hcs_dispatch(cmd, true));
+    }
+  }
+}
+
 void test_max_tset_parses_float(void) {
   HcsCommandResult r = parse("hcs/n/set/max_tset", "75");
   TEST_ASSERT_EQUAL(HCS_CMD_MAX_TSET, r.cmd);
@@ -980,6 +1001,8 @@ int main(void) {
   RUN_TEST(test_reboot_and_ota_url);
   RUN_TEST(test_clear_tset_cap_parses_with_any_payload);
   RUN_TEST(test_max_tset_parses_float);
+  RUN_TEST(test_check_update_parses);
+  RUN_TEST(test_dispatch_matrix_empty_never_acts);
   RUN_TEST(test_max_tset_sanitize_accepts_and_clamps);
   RUN_TEST(test_max_tset_sanitize_rejects_garbage);
   RUN_TEST(test_unknown_topic_ignored);

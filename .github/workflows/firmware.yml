@@ -17,8 +17,24 @@ permissions:
   contents: write
 
 jobs:
+  verify:
+    name: host-native unit tests (gate — nothing compiles until these pass)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PlatformIO
+        run: pip install -U platformio
+      - name: Run host-native unit tests
+        working-directory: firmware
+        run: pio test -e native
+
   build:
     name: ${{ matrix.env }}
+    needs: [verify]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

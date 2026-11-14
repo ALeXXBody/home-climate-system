@@ -147,6 +147,11 @@ static void publishCfgSnapshot() {
 static bool cfg_announced = false;
 
 /** Settings pushed over MQTT by HCC: same JSON as POST /api/settings. */
+static void onCheckUpdateNow() {
+  Serial.println("[mqtt] head-end requested an update check");
+  net.requestAutoUpdateCheck();
+}
+
 static void onSettingsJson(const String& json) {
   Serial.println("[mqtt] settings update received");
   net.applySettingsJson(json);  // persists + republishes + reboots
@@ -479,6 +484,7 @@ void setup() {
   mqtt.setDeviceInfo(settings.device_name, net.localIp());
   mqtt.onOtaUrl(onOtaUrl);
   mqtt.onSettings(onSettingsJson);
+  mqtt.onCheckUpdate(onCheckUpdateNow);
   mqtt.onLed(applyLedPayload);
   net.setConfigReporter([](const String& j) { publishCfgSnapshot(); });
   // ensure the lambda above can reach the retained publisher even before

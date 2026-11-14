@@ -10,6 +10,7 @@ depend on MQTT at all.
 
 | Version | Change |
 |---|---|
+| [v1.5.37](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.37) | On-demand pull trigger (`set/check_update` fetches latest.json now instead of the 6 h cadence; deferred during burns/flashes) + dispatch policy as a matrix-tested pure function: no command acts on an empty payload |
 | [v1.5.36](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.36) | Kill the retained-echo self-trigger loop: empty MQTT payloads never act, out-of-range MaxTSet rejected instead of clamped; gw OTA budget rescoped to deployed boards only |
 | [v1.5.35](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.35) | Write the boiler Max CH setpoint (ID 57) over MQTT (`set/max_tset`); exact library pins after a floating caret grew the gw image past its OTA slot |
 | [v1.5.34](https://github.com/ALeXXBody/home-climate-system/releases/tag/v1.5.34) | Full OpenTherm ID registry sweep: every readable boiler-side ID probed in rotation, answers in the retained `ot_map` leaf and `/api/status` (includes ID 57, the OT-side CH ceiling value) |
